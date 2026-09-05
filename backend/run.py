@@ -1,0 +1,14 @@
+from app import create_app, socketio
+
+app = create_app()
+
+
+if __name__ == "__main__":
+    socketio.run(
+        app,
+        host=app.config["HOST"],
+        port=app.config["PORT"],
+        debug=app.config["DEBUG"],
+        allow_unsafe_werkzeug=app.config["DEBUG"],
+        use_reloader=False,
+    )

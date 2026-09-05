@@ -1,0 +1,42 @@
+{
+  "match_id": "3b241101-e2bb-4255-8caf-4136c566a962",
+  "winner": "A",
+  "player_a": {
+    "total_points": 8420,
+    "category_points": {
+      "adaptability": 1920,
+      "creativity": 1760,
+      "speed": 1540,
+      "coherence": 1650,
+      "collaboration": 1550
+    },
+    "highlight": "Turned the upside-down manual into a confident captain's ritual.",
+    "improvement": "Invite the intern to make more landing decisions earlier in the scene."
+  },
+  "player_b": {
+    "total_points": 7930,
+    "category_points": {
+      "adaptability": 1600,
+      "creativity": 1710,
+      "speed": 1490,
+      "coherence": 1580,
+      "collaboration": 1550
+    },
+    "highlight": "Used the manual detail to challenge the captain and advance the scene.",
+    "improvement": "Commit to the intern's fake expertise with a more specific landing plan."
+  },
+  "highlight_events": [
+    {
+      "player_id": "A",
+      "label": "GREAT RECOVERY",
+      "points": 220,
+      "transcript_event_ids": ["speech_003", "switch_001", "speech_004"]
+    },
+    {
+      "player_id": "B",
+      "label": "STRONG BUILD",
+      "points": 160,
+      "transcript_event_ids": ["speech_002"]
+    }
+  ]
+}

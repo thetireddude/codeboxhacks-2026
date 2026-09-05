@@ -1,0 +1,39 @@
+{
+  "match_id": "3b241101-e2bb-4255-8caf-4136c566a962",
+  "player_a_id": "94e983e1-8241-4f81-9d10-596c2a7b114d",
+  "player_b_id": "b6118591-2c13-4c86-a6d7-394fbb0c8da1",
+  "state": "ROUND_ACTIVE",
+  "scenario": {
+    "tone": "wacky",
+    "scenario": "Two astronauts discover that neither knows how to land the spaceship.",
+    "player_a_role": "Overconfident captain",
+    "player_b_role": "Intern pretending to know what they are doing"
+  },
+  "round_started_at": "2026-09-05T19:30:00Z",
+  "active_player_id": "A",
+  "switches_remaining": {
+    "A": 5,
+    "B": 4
+  },
+  "transcript_events": [
+    {
+      "type": "speech",
+      "id": "speech_001",
+      "player_id": "A",
+      "text": "Relax, I have landed dozens of ships just like this one.",
+      "start_ms": 4124,
+      "end_ms": 6921,
+      "is_final": true,
+      "accepted": true,
+      "truncated_by_switch": false,
+      "truncated_by_round_end": false
+    },
+    {
+      "type": "switch",
+      "id": "switch_001",
+      "from_player_id": "B",
+      "target_player_id": "A",
+      "timestamp_ms": 12840
+    }
+  ]
+}

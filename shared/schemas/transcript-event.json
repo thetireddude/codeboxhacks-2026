@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://improv-faceoff.local/schemas/transcript-event.json",
+  "title": "Transcript Event",
+  "oneOf": [
+    { "$ref": "#/$defs/speechEvent" },
+    { "$ref": "#/$defs/switchEvent" }
+  ],
+  "$defs": {
+    "playerSlot": { "type": "string", "enum": ["A", "B"] },
+    "speechEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "player_id",
+        "text",
+        "start_ms",
+        "end_ms",
+        "is_final",
+        "accepted",
+        "truncated_by_switch",
+        "truncated_by_round_end"
+      ],
+      "properties": {
+        "type": { "const": "speech" },
+        "id": { "type": "string", "pattern": "^speech_[A-Za-z0-9_-]+$" },
+        "player_id": { "$ref": "#/$defs/playerSlot" },
+        "text": { "type": "string" },
+        "start_ms": { "type": "integer", "minimum": 0 },
+        "end_ms": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "null" }
+          ]
+        },
+        "is_final": { "type": "boolean" },
+        "accepted": { "type": "boolean" },
+        "truncated_by_switch": { "type": "boolean" },
+        "truncated_by_round_end": { "type": "boolean" }
+      }
+    },
+    "switchEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "from_player_id",
+        "target_player_id",
+        "timestamp_ms"
+      ],
+      "properties": {
+        "type": { "const": "switch" },
+        "id": { "type": "string", "pattern": "^switch_[A-Za-z0-9_-]+$" },
+        "from_player_id": { "$ref": "#/$defs/playerSlot" },
+        "target_player_id": { "$ref": "#/$defs/playerSlot" },
+        "timestamp_ms": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

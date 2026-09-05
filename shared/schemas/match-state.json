@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://improv-faceoff.local/schemas/match-state.json",
+  "title": "Match State",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "match_id",
+    "player_a_id",
+    "player_b_id",
+    "state",
+    "scenario",
+    "round_started_at",
+    "active_player_id",
+    "switches_remaining",
+    "transcript_events"
+  ],
+  "properties": {
+    "match_id": { "type": "string", "format": "uuid" },
+    "player_a_id": { "type": "string", "format": "uuid" },
+    "player_b_id": { "type": "string", "format": "uuid" },
+    "state": {
+      "type": "string",
+      "enum": [
+        "LOBBY",
+        "QUEUEING",
+        "MATCH_FOUND",
+        "CONNECTING_MEDIA",
+        "READY",
+        "COUNTDOWN",
+        "ROUND_ACTIVE",
+        "ROUND_END",
+        "SCORING",
+        "RESULTS"
+      ]
+    },
+    "scenario": {
+      "oneOf": [
+        { "$ref": "scenario.json" },
+        { "type": "null" }
+      ]
+    },
+    "round_started_at": {
+      "oneOf": [
+        { "type": "string", "format": "date-time" },
+        { "type": "null" }
+      ]
+    },
+    "active_player_id": {
+      "oneOf": [
+        { "type": "string", "enum": ["A", "B"] },
+        { "type": "null" }
+      ]
+    },
+    "switches_remaining": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["A", "B"],
+      "properties": {
+        "A": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "B": { "type": "integer", "minimum": 0, "maximum": 5 }
+      }
+    },
+    "transcript_events": {
+      "type": "array",
+      "items": { "$ref": "transcript-event.json" }
+    }
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://improv-faceoff.local/schemas/results.json",
+  "title": "Match Results",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["match_id", "winner", "player_a", "player_b", "highlight_events"],
+  "properties": {
+    "match_id": { "type": "string", "format": "uuid" },
+    "winner": { "type": "string", "enum": ["A", "B", "TIE"] },
+    "player_a": { "$ref": "#/$defs/playerResult" },
+    "player_b": { "$ref": "#/$defs/playerResult" },
+    "highlight_events": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/highlightEvent" }
+    }
+  },
+  "$defs": {
+    "categoryPoints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adaptability", "creativity", "speed", "coherence", "collaboration"],
+      "properties": {
+        "adaptability": { "type": "integer", "minimum": 0 },
+        "creativity": { "type": "integer", "minimum": 0 },
+        "speed": { "type": "integer", "minimum": 0 },
+        "coherence": { "type": "integer", "minimum": 0 },
+        "collaboration": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "playerResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total_points", "category_points", "highlight", "improvement"],
+      "properties": {
+        "total_points": { "type": "integer", "minimum": 0 },
+        "category_points": { "$ref": "#/$defs/categoryPoints" },
+        "highlight": { "type": "string", "minLength": 1 },
+        "improvement": { "type": "string", "minLength": 1 }
+      }
+    },
+    "highlightEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["player_id", "label", "points", "transcript_event_ids"],
+      "properties": {
+        "player_id": { "type": "string", "enum": ["A", "B"] },
+        "label": { "type": "string", "minLength": 1 },
+        "points": { "type": "integer", "minimum": 0 },
+        "transcript_event_ids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

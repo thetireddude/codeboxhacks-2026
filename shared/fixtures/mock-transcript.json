@@ -1,0 +1,69 @@
+[
+  {
+    "type": "speech",
+    "id": "speech_001",
+    "player_id": "A",
+    "text": "Relax, I have landed dozens of ships just like this one.",
+    "start_ms": 4124,
+    "end_ms": 6921,
+    "is_final": true,
+    "accepted": true,
+    "truncated_by_switch": false,
+    "truncated_by_round_end": false
+  },
+  {
+    "type": "speech",
+    "id": "speech_002",
+    "player_id": "B",
+    "text": "Then why are you holding the manual upside down?",
+    "start_ms": 7900,
+    "end_ms": 10150,
+    "is_final": true,
+    "accepted": true,
+    "truncated_by_switch": false,
+    "truncated_by_round_end": false
+  },
+  {
+    "type": "speech",
+    "id": "speech_003",
+    "player_id": "A",
+    "text": "Because the gravity controls are—",
+    "start_ms": 11100,
+    "end_ms": 12840,
+    "is_final": true,
+    "accepted": false,
+    "truncated_by_switch": true,
+    "truncated_by_round_end": false
+  },
+  {
+    "type": "switch",
+    "id": "switch_001",
+    "from_player_id": "B",
+    "target_player_id": "A",
+    "timestamp_ms": 12840
+  },
+  {
+    "type": "speech",
+    "id": "speech_004",
+    "player_id": "A",
+    "text": "This is actually the captain's traditional pre-landing dance.",
+    "start_ms": 13220,
+    "end_ms": 16100,
+    "is_final": true,
+    "accepted": true,
+    "truncated_by_switch": false,
+    "truncated_by_round_end": false
+  },
+  {
+    "type": "speech",
+    "id": "speech_005",
+    "player_id": "B",
+    "text": "Then dance us toward the big green planet before we—",
+    "start_ms": 57200,
+    "end_ms": 60000,
+    "is_final": true,
+    "accepted": true,
+    "truncated_by_switch": false,
+    "truncated_by_round_end": true
+  }
+]
