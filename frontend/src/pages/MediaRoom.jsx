@@ -77,7 +77,7 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
       handledSwitchEventIdsRef.current.delete(handledSwitchEventIdsRef.current.values().next().value);
     }
     window.clearTimeout(switchFeedbackTimerRef.current);
-    setSwitchFeedback({ eventId: event.id });
+    setSwitchFeedback({ eventId: event.id, targetPlayer: event.target_player_id });
     switchFeedbackTimerRef.current = window.setTimeout(() => setSwitchFeedback(null), 1800);
     if (event.target_player_id === localPlayer) {
       setPartialTranscript("");
@@ -390,7 +390,8 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
 
   const timerLabel = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}`;
   const resultFor = (player) => player === "A" ? results?.player_a : results?.player_b;
-  const switchFeedbackVisible = Boolean(switchFeedback);
+  const localSwitchFeedbackVisible = switchFeedback?.targetPlayer === localPlayer;
+  const remoteSwitchFeedbackVisible = switchFeedback?.targetPlayer === opponentPlayer;
 
   return (
     <main className="media-page">
@@ -432,16 +433,16 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
           )}
 
           <div className={`video-grid ${isInRound ? "game-video-grid" : ""}`}>
-            <article className={`video-tile video-tile--local ${round?.active_player_id === localPlayer ? "video-tile--active" : ""} ${switchFeedbackVisible ? "video-tile--switched" : ""}`}>
+            <article className={`video-tile video-tile--local ${round?.active_player_id === localPlayer ? "video-tile--active" : ""} ${localSwitchFeedbackVisible ? "video-tile--switched" : ""}`}>
               <video ref={localVideoRef} autoPlay muted playsInline className={hasLocalVideo ? "" : "video-tile__hidden"} />
               {!hasLocalVideo && <div className="video-placeholder"><b>YOU</b><span>{connectionState === "connecting" ? "CONNECTING CAMERA…" : "CAMERA PREVIEW"}</span></div>}
-              {switchFeedbackVisible && <div key={switchFeedback.eventId} className="switch-feedback" role="status" aria-live="assertive"><b>SWITCHED!</b></div>}
+              {localSwitchFeedbackVisible && <div key={switchFeedback.eventId} className="switch-feedback" role="status" aria-live="assertive"><b>SWITCHED!</b></div>}
               <div className="video-tile__label"><span>YOU · PLAYER {localPlayer}</span><b>{isInRound && round?.active_player_id !== localPlayer ? "○ TURN MUTED" : devices.microphone ? "● MIC ON" : "○ MIC OFF"}</b></div>
             </article>
-            <article className={`video-tile video-tile--remote ${round?.active_player_id === opponentPlayer ? "video-tile--active" : ""} ${switchFeedbackVisible ? "video-tile--switched" : ""}`}>
+            <article className={`video-tile video-tile--remote ${round?.active_player_id === opponentPlayer ? "video-tile--active" : ""} ${remoteSwitchFeedbackVisible ? "video-tile--switched" : ""}`}>
               <video ref={remoteVideoRef} autoPlay playsInline className={hasRemoteVideo ? "" : "video-tile__hidden"} />
               {!hasRemoteVideo && <div className="video-placeholder"><b>{opponentName}</b><span>{connectionState === "waiting" ? "WAITING FOR OPPONENT MEDIA" : "LIVEKIT VIDEO CONNECTING"}</span></div>}
-              {switchFeedbackVisible && <div key={`${switchFeedback.eventId}-remote`} className="switch-feedback" aria-hidden="true"><b>SWITCHED!</b></div>}
+              {remoteSwitchFeedbackVisible && <div key={`${switchFeedback.eventId}-remote`} className="switch-feedback" role="status" aria-live="assertive"><b>SWITCHED!</b></div>}
               <div className="video-tile__label"><span>{opponentName} · PLAYER {opponentPlayer}</span><b className="video-tile__waiting">{hasRemoteVideo ? "● CONNECTED" : "⌁ CONNECTING"}</b></div>
             </article>
             {connectionState === "countdown" && <div className="countdown-overlay" aria-live="assertive"><span>ROUND 1</span><b>{countdown || "GO!"}</b><small>THE SCENE STARTS NOW</small></div>}

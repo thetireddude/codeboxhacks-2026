@@ -289,6 +289,13 @@ button:not(.guest-banner button:first-of-type):active { box-shadow: inset 0 4px 
 .video-tile--switched::after { animation: switch-damage-vignette 1.2s ease-out both; background: radial-gradient(ellipse at center, transparent 26%, rgba(108, 0, 0, .14) 49%, rgba(197, 0, 0, .76) 100%); content: ""; inset: 0; pointer-events: none; position: absolute; z-index: 2; }
 .switch-feedback { align-items: center; animation: switch-feedback-pop 1.2s cubic-bezier(.2,.85,.2,1) both; color: #fff5f5; display: flex; font-family: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif; font-size: clamp(34px, 5vw, 62px); inset: 0; justify-content: center; letter-spacing: .08em; pointer-events: none; position: absolute; text-shadow: 3px 3px 0 #790000, 0 0 18px #f20b0b; z-index: 3; }
 .switch-feedback b { transform: rotate(-4deg); }
+/* Keep the signal visible even when the OS requests reduced animation.
+   React removes it after 1.8 seconds; animation completion must not hide it. */
+@media (prefers-reduced-motion: reduce) {
+  .video-tile--switched, .video-tile--switched::after, .switch-feedback { animation: none !important; }
+  .video-tile--switched::after, .switch-feedback { opacity: 1; transform: none; }
+  .switch-feedback b { transform: none; }
+}
 @keyframes switch-damage-vignette { 0% { opacity: 0; } 14% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes switch-camera-shake { 0%, 100% { transform: translate(0); } 18% { transform: translate(-8px, 3px); } 36% { transform: translate(7px, -4px); } 55% { transform: translate(-6px, -2px); } 74% { transform: translate(4px, 3px); } }
 @keyframes switch-feedback-pop { 0% { opacity: 0; transform: scale(.45); } 16% { opacity: 1; transform: scale(1.15); } 32% { transform: scale(.96); } 100% { opacity: 0; transform: scale(1.04); } }
