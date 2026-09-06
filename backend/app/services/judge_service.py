@@ -268,7 +268,7 @@ def create_judge_service(config: Any) -> JudgeService:
 def _config_value(config: Any, name: str, default: Any = None) -> Any:
     """Read either Flask's mapping config or the standalone script config class."""
     if hasattr(config, "get"):
-        return config.get(name, default)
+        return getattr(config, "SOME_SETTING", None)
     return getattr(config, name, default)
 
 

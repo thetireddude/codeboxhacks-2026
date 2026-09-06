@@ -126,12 +126,14 @@ class ScenarioService:
 
 def create_scenario_service(config: Any) -> ScenarioService | MockScenarioService:
     """Build Gemini generation in production and deterministic generation in tests."""
-    if config.get("TESTING"):
+
+    if getattr(config, "TESTING", False):
         return MockScenarioService()
+
     return ScenarioService(
-        api_key=config["GEMINI_API_KEY"],
-        model=config["GEMINI_SCENARIO_MODEL"],
-        max_attempts=config["GEMINI_SCENARIO_MAX_ATTEMPTS"],
-        tone_pool=config["GEMINI_SCENARIO_TONES"],
-        prompt_template=config["GEMINI_SCENARIO_PROMPT_TEMPLATE"],
+        api_key=getattr(config, "GEMINI_API_KEY", None),
+        model=getattr(config, "GEMINI_SCENARIO_MODEL", None),
+        max_attempts=getattr(config, "GEMINI_SCENARIO_MAX_ATTEMPTS", 3),
+        tone_pool=getattr(config, "GEMINI_SCENARIO_TONES", ()),
+        prompt_template=getattr(config, "GEMINI_SCENARIO_PROMPT_TEMPLATE", ""),
     )

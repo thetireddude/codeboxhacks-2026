@@ -10,6 +10,12 @@ class Tone(StrEnum):
     STUPID = "stupid"
     SERIOUS = "serious"
     SAD = "sad"
+    AWKWARD = "awkward"
+    TENSE = "tense"
+    EMOTIONAL = "emotional"
+    CHAOTIC = "chaotic"
+    WHOLESOME = "wholesome"
+    DRAMATIC = "dramatic"
 
 
 class Scenario(BaseModel):

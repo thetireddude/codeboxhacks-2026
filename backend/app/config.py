@@ -16,7 +16,6 @@ def _as_int(name: str, default: int) -> int:
     except ValueError as error:
         raise ValueError(f"{name} must be an integer") from error
 
-
 def _as_origins(name: str, default: str) -> list[str]:
     return [
         item.strip() for item in os.getenv(name, default).split(",") if item.strip()
@@ -62,15 +61,21 @@ class AppConfig:
         Tone.STUPID,
         Tone.SERIOUS,
         Tone.SAD,
+        Tone.AWKWARD,
+        Tone.TENSE,
+        Tone.EMOTIONAL,
+        Tone.CHAOTIC,
+        Tone.WHOLESOME,
+        Tone.DRAMATIC
     )
     GEMINI_SCENARIO_PROMPT_TEMPLATE = (
         "Create an original, brief improv scene starter in a {tone} tone. "
-        "Should be no more than 12 words.\n\n"
+        "Should be no more than 15 words.\n\n"
         "Give both performers distinct, complementary roles with an immediate "
         "relationship or tension. The setup must be playable and readable "
         "immediately in a "
         "short two-person scene.\n\n"
-        "Do not use real people, copyrighted characters, slurs, sexual content, "
+        "Do not use slurs, sexual content, "
         "graphic violence, illegal instructions, or stereotypes about protected "
         "groups. Do not include a winner, scoring instruction, Switch rule, or "
         "gameplay modifier."
