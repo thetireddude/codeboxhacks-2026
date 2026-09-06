@@ -1,4 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { io } from "socket.io-client";
+
+import { appConfig } from "../services/config.js";
 import { MediaRoom } from "./MediaRoom.jsx";
 
 const messages = {
@@ -14,23 +17,73 @@ export function HomePage() {
   const [notice, setNotice] = useState("");
   const [screen, setScreen] = useState("home");
   const [queueState, setQueueState] = useState("searching");
+  const [match, setMatch] = useState(null);
+  const socketRef = useRef(null);
+  const guestIdRef = useRef(window.localStorage.getItem("improv-faceoff:guest-id"));
 
   const handleClick = (action) => setNotice(messages[action]);
 
-  useEffect(() => {
-    if (screen !== "matchmaking" || queueState !== "searching") return undefined;
-    const matchTimer = window.setTimeout(() => setQueueState("found"), 3200);
-    return () => window.clearTimeout(matchTimer);
-  }, [queueState, screen]);
+  useEffect(() => () => socketRef.current?.disconnect(), []);
+
+  const connectAndJoinQueue = () => {
+    let socket = socketRef.current;
+    if (!socket) {
+      socket = io(appConfig.backendUrl, { autoConnect: false });
+      socketRef.current = socket;
+      socket.on("match:found", (payload) => {
+        setMatch(payload);
+        setQueueState("found");
+      });
+      socket.on("match:error", (payload) => {
+        setNotice(payload.message ?? "The queue could not complete your request.");
+        setQueueState("error");
+      });
+      socket.on("connect_error", () => {
+        setNotice("Could not reach the matchmaking server. Please try again.");
+        setQueueState("error");
+      });
+    }
+
+    const join = () => {
+      socket.emit("guest:create", guestIdRef.current ? { guest_id: guestIdRef.current } : {}, (created) => {
+        if (!created?.ok) {
+          setNotice(created?.error?.message ?? "Could not create a guest session.");
+          setQueueState("error");
+          return;
+        }
+        guestIdRef.current = created.guest.guest_id;
+        window.localStorage.setItem("improv-faceoff:guest-id", guestIdRef.current);
+        socket.emit("queue:join", { guest_id: guestIdRef.current }, (joined) => {
+          if (!joined?.ok) {
+            setNotice("Could not join the public queue.");
+            setQueueState("error");
+          }
+        });
+      });
+    };
+
+    if (socket.connected) join();
+    else {
+      socket.once("connect", join);
+      socket.connect();
+    }
+  };
 
   const startSearch = () => {
     setNotice("");
+    setMatch(null);
     setQueueState("searching");
     setScreen("matchmaking");
+    connectAndJoinQueue();
   };
 
   const returnHome = () => {
+    if (socketRef.current?.connected && guestIdRef.current) {
+      socketRef.current.emit("queue:leave", { guest_id: guestIdRef.current });
+    }
+    socketRef.current?.disconnect();
     setNotice("");
+    setMatch(null);
     setScreen("home");
   };
 
@@ -62,15 +115,15 @@ export function HomePage() {
               <>
                 <p className="queue-label queue-label--error">QUEUE CONNECTION INTERRUPTED</p>
                 <h1>LET&apos;S<br /><span>TRY THAT<br />AGAIN.</span></h1>
-                <p className="queue-copy">The queue did not respond. No match was created and your place has been released.</p>
-                <div className="queue-actions"><button className="match-button" type="button" onClick={() => setQueueState("searching")}><span className="match-button__people">↻</span><span><strong>RETRY SEARCH</strong><small>REJOIN THE PUBLIC QUEUE</small></span></button><button className="cancel-link" type="button" onClick={returnHome}>BACK TO LOBBY</button></div>
+                <p className="queue-copy">{notice || "The queue did not respond. No match was created and your place has been released."}</p>
+                <div className="queue-actions"><button className="match-button" type="button" onClick={startSearch}><span className="match-button__people">↻</span><span><strong>RETRY SEARCH</strong><small>REJOIN THE PUBLIC QUEUE</small></span></button><button className="cancel-link" type="button" onClick={returnHome}>BACK TO LOBBY</button></div>
               </>
             ) : isFound ? (
               <>
                 <p className="queue-label queue-label--found">PUBLIC QUEUE · MATCH CONFIRMED</p>
                 <h1>OPPONENT<br /><span>FOUND.</span></h1>
-                <p className="queue-copy">Player 7392 is ready to improvise. Your shared prompt is being prepared.</p>
-                <div className="found-card"><span>YOU</span><b>VS</b><span>PLAYER 7392</span></div>
+                <p className="queue-copy">{match?.opponent?.display_name ?? "Your opponent"} is ready to improvise. Your shared prompt is being prepared.</p>
+                <div className="found-card"><span>YOU · PLAYER {match?.player_id ?? "?"}</span><b>VS</b><span>{match?.opponent?.display_name ?? "OPPONENT"}</span></div>
                 <div className="queue-actions"><button className="match-button" type="button" onClick={() => setScreen("media")}><span className="match-button__people">♟♟♟</span><span><strong>CONTINUE</strong><small>CHECK CAMERA + MIC</small></span></button><button className="cancel-link" type="button" onClick={returnHome}>CANCEL MATCH</button></div>
               </>
             ) : (
