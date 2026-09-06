@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from flask import request
 
 from app import socketio
+from app.models import MatchStatus
 from app.services.game_service import GameService, GameStateError, SwitchRejectedError
+from app.services.judge_service import JudgeError
 from app.services.match_integration_service import MatchIntegrationService
 from app.services.matchmaking_service import MatchmakingService
 from app.services.redis_service import StorageUnavailableError
@@ -26,6 +29,9 @@ from app.views.socket_views import (
     transcript_event_payload,
     turn_changed_payload,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def register_game_handlers(
@@ -189,7 +195,7 @@ def register_game_handlers(
             return {"ok": False, "code": "STORAGE_UNAVAILABLE"}
 
     @socketio.on("disconnect")
-    def disconnect() -> None:
+    def disconnect(_reason: str | None = None) -> None:
         guest_id_text = socket_guests.pop(request.sid, None)
         if not guest_id_text:
             return
@@ -197,9 +203,17 @@ def register_game_handlers(
             guest_id = UUID(guest_id_text)
             match = matchmaking_service.get_match_for_guest(guest_id)
             matchmaking_service.disconnect_guest(guest_id, request.sid)
-            matchmaking_service.release_guest_match(guest_id)
             if match is None:
                 return
+            # Judging may take a few seconds. Keep the match binding during the
+            # existing cleanup window so a transport reconnect receives results.
+            preserve_result_delivery = match.state in (
+                MatchStatus.ROUND_END,
+                MatchStatus.SCORING,
+                MatchStatus.RESULTS,
+            )
+            if not preserve_result_delivery:
+                matchmaking_service.release_guest_match(guest_id)
             match = game_service.disconnect_player(match.match_id, guest_id)
             slot = "A" if match.player_a_id == guest_id else "B"
             _emit_to_match(
@@ -220,6 +234,30 @@ def register_game_handlers(
             )
         except (GameStateError, StorageUnavailableError, ValueError):
             return
+
+    @socketio.on("match:resume")
+    def resume_match(payload: dict | None) -> dict:
+        """Restore post-round state after a transient Socket.IO reconnect."""
+        try:
+            match_id, guest_id = _owned_match_payload(
+                payload, matchmaking_service, request.sid
+            )
+            match = matchmaking_service.get_match_for_guest(guest_id)
+            if match is None or match.match_id != match_id:
+                raise ValueError("Guest is not in this match")
+            if match.state in (MatchStatus.ROUND_END, MatchStatus.SCORING):
+                socketio.emit(
+                    "round:end",
+                    round_end_payload(match, datetime.now(UTC).isoformat()),
+                    to=request.sid,
+                )
+            if match.state == MatchStatus.RESULTS and match.results is not None:
+                socketio.emit(
+                    "results:ready", results_ready_payload(match.results), to=request.sid
+                )
+            return {"ok": True, "state": match.state.value}
+        except (ValueError, StorageUnavailableError):
+            return {"ok": False}
 
 
 def _run_round(
@@ -269,6 +307,44 @@ def _run_round(
             match,
             "results:ready",
             results_ready_payload(results),
+        )
+        socketio.start_background_task(
+            _cleanup_match_after_delay,
+            matchmaking_service,
+            match_id,
+            cleanup_delay_ms,
+        )
+    except JudgeError:
+        # Gemini failures happen in this background task; surface them to both
+        # players rather than leaving the result screen in a permanent wait.
+        logger.exception("Gemini judging failed for match %s.", match_id)
+        _emit_to_match(
+            matchmaking_service,
+            match,
+            "match:error",
+            match_error_payload(
+                "JUDGING_UNAVAILABLE",
+                "Gemini could not finish judging this round. Please start a new match.",
+            ),
+        )
+        socketio.start_background_task(
+            _cleanup_match_after_delay,
+            matchmaking_service,
+            match_id,
+            cleanup_delay_ms,
+        )
+    except Exception:
+        # A malformed provider response or integration regression must also end
+        # the round visibly instead of marooning both clients on the judge view.
+        logger.exception("Unexpected scoring failure for match %s.", match_id)
+        _emit_to_match(
+            matchmaking_service,
+            match,
+            "match:error",
+            match_error_payload(
+                "JUDGING_UNAVAILABLE",
+                "Gemini could not finish judging this round. Please start a new match.",
+            ),
         )
         socketio.start_background_task(
             _cleanup_match_after_delay,

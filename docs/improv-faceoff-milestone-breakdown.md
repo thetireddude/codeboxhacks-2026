@@ -758,6 +758,30 @@ Production matches now require `GEMINI_API_KEY` and use Gemini generation;
 the deterministic astronaut scene remains available only to automated tests
 and the standalone mock judging route.
 
+#### Deployment readiness
+
+The public frontend can run on any player computer with a browser-safe
+`VITE_BACKEND_URL`. The backend host alone must configure Gemini, Deepgram, and
+LiveKit credentials, permit its public frontend origin through CORS, and accept
+Socket.IO/WebSocket traffic. `GET /api/ready` reports missing host-side
+configuration names without exposing values. Gemini and unexpected scoring
+failures are logged on the backend host while both clients receive the safe
+`JUDGING_UNAVAILABLE` state and the match is cleaned up.
+
+Gemini highlight references are optional UI metadata. The backend now removes
+unknown live transcript IDs and drops an unverifiable highlight rather than
+discarding an otherwise valid semantic judgment, scores, and coaching feedback.
+The judge retries once only after a failed or invalid structured Gemini response;
+successful live rounds still make a single request.
+
+The structured response budget is 2,048 tokens with at most four highlights,
+so UUID-length live event references cannot exhaust the fixture-sized output
+budget. Unparsed responses log only their provider finish reason for diagnosis.
+
+If Gemini remains unavailable, the live match still reaches `results:ready`
+using only deterministic Speed scoring and an explicit unavailable-feedback
+notice. This prevents a provider outage from interrupting a completed match.
+
 ---
 
 ## Milestone I4 — Live Transcript Integration
@@ -843,11 +867,15 @@ Automatic turns, mid-sentence Switches, and repeated Switches work live.
 The game UI now renders the server-owned active speaker, Switch inventory, and
 an enabled Switch control only for the listener. It sends idempotent
 `switch:press` requests, consumes accepted/rejected Switch payloads, displays
-Switch events in the transcript, and restarts the interrupted local PCM16
+Switch events inline in the chronological transcript, and restarts the interrupted local PCM16
 stream for the required replacement response. Normal speech finalization
 continues to consume the authoritative `turn:changed` event. The remaining
 I5 completion check is a two-browser test covering automatic turns,
 mid-sentence Switches, and repeated Switches.
+The default turn-end silence window is 900 ms (within the 700–1200 ms
+playtesting range) so the listener has a meaningful opportunity to Switch
+before a normal response finalizes; it remains configurable through
+`TURN_END_SILENCE_MS`.
 
 ---
 
@@ -875,6 +903,21 @@ Connect round completion to real judging and results.
 ### Done When
 
 Both players receive the same final arcade result.
+
+### Current implementation status — Ready for two-browser validation
+
+The media screen now transitions from the authoritative `round:end` event to
+a judging state, then renders the `results:ready` payload for both players.
+The result view displays winner/tie status, both final totals, every arcade
+category, each player's best moment and improvement, and the shared highlight
+reel. The result is retained for the existing short cleanup window: if a
+player transiently reconnects while Gemini is judging, the restored guest
+binding receives the same authoritative `results:ready` payload. The remaining
+I6 completion check is a real two-browser round using Gemini judging to confirm
+both clients receive and render the same payload.
+If Gemini fails in the background judging task, both players now receive a
+clear `JUDGING_UNAVAILABLE` match error and the match is scheduled for cleanup
+instead of remaining indefinitely in the scoring state.
 
 ---
 

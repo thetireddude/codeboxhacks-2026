@@ -34,7 +34,9 @@ class AppConfig:
     COUNTDOWN_DURATION_MS = _as_int("COUNTDOWN_DURATION_MS", 3_000)
     MATCH_CLEANUP_DELAY_MS = _as_int("MATCH_CLEANUP_DELAY_MS", 300_000)
     STARTING_SWITCH_COUNT = _as_int("STARTING_SWITCH_COUNT", 5)
-    TURN_END_SILENCE_MS = _as_int("TURN_END_SILENCE_MS", 500)
+    # Give the listener a practical Switch window before STT ends the turn.
+    # This stays configurable for playtesting; the spec recommends 700–1200 ms.
+    TURN_END_SILENCE_MS = _as_int("TURN_END_SILENCE_MS", 900)
     SWITCH_RESPONSE_MIN_MS = _as_int("SWITCH_RESPONSE_MIN_MS", 0)
     SWITCH_MODE = os.getenv("SWITCH_MODE", "ALWAYS_AVAILABLE_DURING_OPPONENT_TURN")
     CHAIN_SWITCH_WINDOW_MS = _as_int("CHAIN_SWITCH_WINDOW_MS", 500)
@@ -43,9 +45,10 @@ class AppConfig:
     GEMINI_SCENARIO_MODEL = os.getenv("GEMINI_SCENARIO_MODEL", "gemini-3.1-flash-lite")
     GEMINI_SCENARIO_MAX_ATTEMPTS = _as_int("GEMINI_SCENARIO_MAX_ATTEMPTS", 2)
     GEMINI_JUDGE_MODEL = os.getenv("GEMINI_JUDGE_MODEL", "gemini-3.1-flash-lite")
-    # Keep post-round feedback responsive: the SDK retries are disabled below,
-    # and one well-formed structured attempt is sufficient for the mockup flow.
-    GEMINI_JUDGE_MAX_ATTEMPTS = _as_int("GEMINI_JUDGE_MAX_ATTEMPTS", 1)
+    # Keep SDK retries disabled, but retry one failed structured judgment. This
+    # protects live UUID-style transcripts from a transient/model-format miss
+    # without slowing successful rounds.
+    GEMINI_JUDGE_MAX_ATTEMPTS = _as_int("GEMINI_JUDGE_MAX_ATTEMPTS", 2)
     GEMINI_JUDGE_TIMEOUT_MS = _as_int("GEMINI_JUDGE_TIMEOUT_MS", 12_000)
 
     # A6 arcade-Speed curve. Points decay linearly per second after a Switch.

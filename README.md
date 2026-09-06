@@ -35,6 +35,54 @@ The API listens on <http://localhost:5000>; `GET /api/health` returns a JSON
 health response. No Redis, LiveKit, Gemini, or speech-to-text service is contacted
 in Milestone 0.
 
+### Deploy the multiplayer backend
+
+Players can open the frontend from any computer. Only the computer or cloud
+service hosting Flask needs integration credentials; keep every key below on
+that backend host and never put one in `frontend/.env` or a `VITE_*` variable.
+
+Before starting the backend host, copy `backend/.env.example` to `backend/.env`
+and set real values for `GEMINI_API_KEY`, `DEEPGRAM_API_KEY`, `LIVEKIT_URL`,
+`LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET`. Set `HOST=0.0.0.0` when the host
+must accept remote traffic, and set `CORS_ORIGINS` to the exact public frontend
+origin (for example, `https://play.example.com`). The host must also expose
+WebSocket/Socket.IO traffic and be reachable over HTTPS for remote microphone
+and camera access.
+
+Build the frontend with its public backend URL:
+
+```env
+# frontend/.env
+VITE_BACKEND_URL=https://api.example.com
+```
+
+After deploying or changing backend environment variables, restart the backend
+and request `GET /api/ready`. It returns `ready` only when every required
+integration is configured; it never returns secret values. If a round reports
+that Gemini could not finish judging, inspect the backend-host logs for the
+underlying Gemini error (key, quota, model access, or network) rather than the
+browser console.
+
+`GEMINI_JUDGE_MAX_ATTEMPTS` defaults to `2`: a successful judgment uses one
+request, while a malformed or transient Gemini response gets one fresh attempt.
+
+The repository-root `Dockerfile` is the production backend image. Build it from
+the repository root, configure the variables from `backend/.env.example` in the
+hosting platform, attach a persistent Redis service, and expose the platform's
+`PORT`. Gunicorn intentionally uses one threaded worker because Socket.IO
+connections are process-local while Redis owns shared match state.
+
+After deployment, require a real WebSocket upgrade—not a polling fallback:
+
+```powershell
+cd backend
+python scripts/check_deployment.py https://api.example.com
+```
+
+The probe checks `/api/health`, `/api/ready`, and a WebSocket-only Socket.IO
+handshake. Threaded Gunicorn plus the explicitly installed `simple-websocket`
+package provides WebSocket support; eventlet is not required.
+
 ### Test Gemini scenario generation
 
 After copying `backend/.env.example` to `backend/.env`, set `GEMINI_API_KEY` and

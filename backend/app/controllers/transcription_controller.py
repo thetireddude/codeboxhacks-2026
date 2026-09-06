@@ -61,7 +61,10 @@ def register_transcription_handlers(
         return {"ok": True}
 
     @socketio.on("transcription:stop")
-    def stop_transcription() -> dict:
+    def stop_transcription(_payload: dict | None = None) -> dict:
+        # Socket.IO clients may send an empty object when they request an ACK.
+        # Accept it so stopping capture at a turn boundary cannot raise a handler
+        # TypeError and disrupt the rest of the round lifecycle.
         return {"ok": True, "stopped": service.stop_stream(request.sid)}
 
     @socketio.on("transcription:interrupt")

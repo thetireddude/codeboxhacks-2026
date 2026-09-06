@@ -19,6 +19,7 @@ backend/.venv/
 .coverage
 htmlcov/
 .ruff_cache/
+*.log
 
 # Editors and operating systems
 .idea/

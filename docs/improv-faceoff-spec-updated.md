@@ -1289,15 +1289,19 @@ participant's video and audio. The frontend emits `player:ready` only after
 local media setup, and follows backend `round:prepare`, `round:start`, and
 `round:end` events for the shared countdown and round clock.
 
-The implementation also keeps media controls available after round end and
-releases a disconnected guest's socket and old match index so that guest can
-return to the public queue.
+The implementation also keeps media controls available after round end. A
+disconnected guest returns to the public queue normally before a round ends;
+after round end, its match binding and final result are retained for the short
+cleanup window so a transient reconnect can receive the shared judging result.
 
 This does not complete the overall game loop: scenario display (Milestone 4 /
 I3) and live transcript rendering (Milestone 5 / I4) are now implemented on
 the frontend and await the existing two-browser remote validation. The
-remaining separate work is turn/Switch UX (I5), real score/result presentation
-(I6), active-match reconnect/resume, and permanent HTTPS hosting.
+remaining separate work was turn/Switch UX (I5), real score/result presentation
+(I6), active-match reconnect/resume, and permanent HTTPS hosting. I5 and I6
+are now implemented; I6 also restores an ended/scoring match or its retained
+result after a transient Socket.IO reconnect. Longer active-round recovery and
+permanent HTTPS hosting remain separate work.
 
 The I3 screen renders the backend-authoritative `round:prepare` scenario,
 tone, and player-specific role for both clients. The I4 screen opens a
@@ -1309,6 +1313,57 @@ The I5 UI now exposes the authoritative active-speaker state and each player's
 remaining Switch inventory. A listener can send an idempotent `switch:press`,
 receive the server result, see the Switch in the shared transcript, and restart
 the interrupted speaker's local stream for the required replacement response.
+The default `TURN_END_SILENCE_MS` is now 900 ms, inside the specified 700–1200
+ms playtesting range, to leave a more practical listener Switch window; teams
+can continue tuning it through environment configuration.
+
+The I6 screen now waits after the server's `round:end` event while Gemini
+judges the final transcript, then renders the shared `results:ready` payload:
+winner or tie, both arcade totals and category scores, player coaching, and
+highlight events. It awaits a real two-browser Gemini judging run for final
+integration validation.
+
+Switches are rendered at their actual chronological event position alongside
+speech, including interrupted/rejected speech. A Gemini judge failure now
+emits `JUDGING_UNAVAILABLE` to both clients and cleans up the match rather than
+leaving the scoring view indefinitely pending.
+
+For deployment, browser clients require only the public `VITE_BACKEND_URL`.
+The Flask host alone owns Gemini, Deepgram, and LiveKit credentials and exposes
+`GET /api/ready`, a secret-free readiness report that returns 503 with the
+names of missing host-side integrations. Gemini judge failures retain the safe
+client message but write the underlying provider error to backend-host logs;
+unexpected scoring failures follow the same visible cleanup path.
+
+Gemini highlight references are optional display metadata. If Gemini cites an
+unknown live transcript ID, the backend retains the validated player scores and
+coaching, removes the unverifiable reference, and omits any highlight with no
+authoritative event remaining; a malformed optional highlight cannot discard a
+completed round's results.
+
+The judge makes one additional application-level attempt only when its first
+Gemini request fails or produces an invalid structured result. Successful
+rounds remain one request; this is separate from, and replaces, opaque SDK
+retry behavior.
+
+The structured judgment reserves 2,048 output tokens and permits at most four
+highlight events. This accommodates UUID-length live transcript references and
+prevents the shorter A5 fixture from masking production output truncation. A
+missing parsed response logs its safe Gemini finish reason without response text.
+When fallback is used, the backend also logs the match ID and transcript event
+IDs, types, timing, acceptance, and truncation flags without dialogue text.
+
+If both Gemini attempts fail, the completed match still emits `results:ready`.
+The fallback preserves deterministic A6 Speed points but assigns zero semantic
+points and clearly labels Gemini coaching as unavailable; it never fabricates
+AI feedback or leaves players stranded on a judging screen.
+
+The production backend ships as the repository-root Docker image using one
+threaded Gunicorn worker. Hosting must provide persistent Redis and the backend
+environment variables; `.env` files and logs are excluded from the image.
+`scripts/check_deployment.py` gates a deployment on health, integration
+configuration, and a WebSocket-only Socket.IO handshake so HTTP polling cannot
+silently mask a broken upgrade path.
 
 Production scenario preparation requires `GEMINI_API_KEY`: it no longer falls
 back to a hardcoded scene when credentials are absent. Deterministic scenarios

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from app.models.judgment import (
@@ -11,6 +12,9 @@ from app.models.judgment import (
     JudgedPlayer,
     SemanticCategoryPoints,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class JudgeError(RuntimeError):
@@ -55,18 +59,33 @@ class JudgeService:
                     config={
                         "response_mime_type": "application/json",
                         "response_schema": self._response_schema(),
-                        "max_output_tokens": 400,
+                        # Live transcript IDs are UUID-length. The former 400
+                        # token cap could truncate otherwise valid structured
+                        # output that succeeded with the short fixture IDs.
+                        "max_output_tokens": 2_048,
                         "temperature": 0.2,
                     },
                 )
+                if response.parsed is None:
+                    raise ValueError(
+                        "Gemini returned no parsed judgment"
+                        f" (finish_reason={self._finish_reason(response)})."
+                    )
                 result = JudgeResult.model_validate(response.parsed)
-                self._validate_event_references(result, judge_input)
-                return result
+                return self._sanitize_highlight_events(result, judge_input)
             except JudgeError:
                 raise
             except Exception as error:
                 last_error = error
 
+        logger.error(
+            "Gemini judging failed after %s attempt(s) using model %s.",
+            self._max_attempts,
+            self._model,
+            exc_info=(type(last_error), last_error, last_error.__traceback__)
+            if last_error is not None
+            else None,
+        )
         raise JudgeError(
             f"Judging failed after {self._max_attempts} attempts."
         ) from last_error
@@ -89,6 +108,15 @@ class JudgeService:
                 },
             )
         return self._client
+
+    @staticmethod
+    def _finish_reason(response: Any) -> str:
+        """Return provider completion metadata without logging response content."""
+        candidates = getattr(response, "candidates", None) or []
+        if not candidates:
+            return "unknown"
+        reason = getattr(candidates[0], "finish_reason", None)
+        return str(reason or "unknown")
 
     @staticmethod
     def _build_prompt(judge_input: JudgeInput) -> str:
@@ -166,6 +194,7 @@ class JudgeService:
                 "player_b": player,
                 "highlight_events": {
                     "type": "ARRAY",
+                    "maxItems": 4,
                     "items": {
                         "type": "OBJECT",
                         "properties": {
@@ -190,29 +219,57 @@ class JudgeService:
         }
 
     @staticmethod
-    def _validate_event_references(
+    def _sanitize_highlight_events(
         result: JudgeResult, judge_input: JudgeInput
-    ) -> None:
+    ) -> JudgeResult:
+        """Keep valid optional highlights without failing an otherwise usable score.
+
+        Gemini's semantic player scores and coaching do not depend on highlight
+        references. Live transcript IDs are generated UUID-like values, which a
+        model can occasionally copy imperfectly. Rather than failing the entire
+        round, omit only references that cannot be proven to belong to the
+        authoritative transcript and drop a highlight that has none left.
+        """
         known_ids = {event.id for event in judge_input.transcript_events}
+        valid_highlights = []
         for event in result.highlight_events:
-            unknown_ids = set(event.transcript_event_ids) - known_ids
-            if unknown_ids:
-                unknown = ", ".join(sorted(unknown_ids))
-                raise ValueError(
-                    f"Highlight references unknown transcript event(s): {unknown}"
+            event_ids = [
+                event_id
+                for event_id in event.transcript_event_ids
+                if event_id in known_ids
+            ]
+            if not event_ids:
+                logger.warning(
+                    "Dropping Gemini highlight with no authoritative transcript IDs."
                 )
+                continue
+            if len(event_ids) != len(event.transcript_event_ids):
+                logger.warning(
+                    "Removing unknown transcript IDs from a Gemini highlight."
+                )
+            valid_highlights.append(
+                event.model_copy(update={"transcript_event_ids": event_ids})
+            )
+        return result.model_copy(update={"highlight_events": valid_highlights})
 
 
 def create_judge_service(config: Any) -> JudgeService:
     """Build the configured A5 Gemini judge at the application boundary."""
-    if config.get("TESTING"):
+    if _config_value(config, "TESTING", False):
         return TestJudgeService()
     return JudgeService(
-        api_key=config["GEMINI_API_KEY"],
-        model=config["GEMINI_JUDGE_MODEL"],
-        max_attempts=config["GEMINI_JUDGE_MAX_ATTEMPTS"],
-        timeout_ms=config["GEMINI_JUDGE_TIMEOUT_MS"],
+        api_key=_config_value(config, "GEMINI_API_KEY"),
+        model=_config_value(config, "GEMINI_JUDGE_MODEL"),
+        max_attempts=_config_value(config, "GEMINI_JUDGE_MAX_ATTEMPTS"),
+        timeout_ms=_config_value(config, "GEMINI_JUDGE_TIMEOUT_MS"),
     )
+
+
+def _config_value(config: Any, name: str, default: Any = None) -> Any:
+    """Read either Flask's mapping config or the standalone script config class."""
+    if hasattr(config, "get"):
+        return config.get(name, default)
+    return getattr(config, name, default)
 
 
 class TestJudgeService:

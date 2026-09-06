@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
+import logging
 from uuid import UUID
 
 from app.models import MatchResults, MatchState
-from app.models.judgment import JudgeInput
+from app.models.judgment import (
+    JudgeInput,
+    JudgeResult,
+    JudgedPlayer,
+    SemanticCategoryPoints,
+)
 from app.models.scoring import ScoringInput
 from .game_service import GameService
-from .judge_service import JudgeService
+from .judge_service import JudgeError, JudgeService
 from .scenario_service import ScenarioService
 from .scoring_service import ScoringService
+
+
+logger = logging.getLogger(__name__)
 
 
 class MatchIntegrationService:
@@ -35,16 +44,26 @@ class MatchIntegrationService:
         match = self._game_service.begin_scoring(match_id)
         if match.scenario is None:
             raise ValueError("A completed match needs a scenario before judging")
-        judgment = self._judge_service.judge(
-            JudgeInput(
-                scenario=match.scenario,
-                transcript_events=match.transcript_events,
-                switch_response_latencies=self._scoring_service.calculate_switch_response_latencies(
-                    match.transcript_events
-                ),
-                round_duration_ms=self._game_service.round_duration_ms,
-            )
+        judge_input = JudgeInput(
+            scenario=match.scenario,
+            transcript_events=match.transcript_events,
+            switch_response_latencies=self._scoring_service.calculate_switch_response_latencies(
+                match.transcript_events
+            ),
+            round_duration_ms=self._game_service.round_duration_ms,
         )
+        try:
+            judgment = self._judge_service.judge(judge_input)
+        except JudgeError:
+            # A completed match should still reach results if Gemini is down.
+            # Preserve objective Speed scoring while avoiding invented semantic
+            # points or coaching that pretends Gemini completed a review.
+            logger.exception(
+                "Using deterministic judging fallback for match %s; events=%s",
+                match_id,
+                self._safe_event_summary(match.transcript_events),
+            )
+            judgment = self._unavailable_judgment()
         results = self._scoring_service.score(
             ScoringInput(
                 match_id=match.match_id,
@@ -54,3 +73,40 @@ class MatchIntegrationService:
             )
         )
         return self._game_service.complete_scoring(match_id, results), results
+
+    @staticmethod
+    def _unavailable_judgment() -> JudgeResult:
+        points = SemanticCategoryPoints(
+            adaptability=0,
+            creativity=0,
+            coherence=0,
+            collaboration=0,
+        )
+        player = JudgedPlayer(
+            category_points=points,
+            highlight="Gemini feedback was unavailable for this round.",
+            improvement="Start a new match to receive Gemini coaching.",
+        )
+        return JudgeResult(player_a=player, player_b=player)
+
+    @staticmethod
+    def _safe_event_summary(events) -> list[dict]:
+        """Describe live judge input without transcript text or credentials."""
+        return [
+            {
+                "id": event.id,
+                "type": event.type,
+                "player_id": getattr(event, "player_id", None),
+                "accepted": getattr(event, "accepted", None),
+                "truncated_by_switch": getattr(
+                    event, "truncated_by_switch", None
+                ),
+                "truncated_by_round_end": getattr(
+                    event, "truncated_by_round_end", None
+                ),
+                "start_ms": getattr(event, "start_ms", None),
+                "end_ms": getattr(event, "end_ms", None),
+                "timestamp_ms": getattr(event, "timestamp_ms", None),
+            }
+            for event in events
+        ]
