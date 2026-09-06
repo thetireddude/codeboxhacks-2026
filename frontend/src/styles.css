@@ -307,13 +307,14 @@ button:not(.guest-banner button:first-of-type):active { box-shadow: inset 0 4px 
 /* Keep the signal visible even when the OS requests reduced animation.
    React removes it after 1.8 seconds; animation completion must not hide it. */
 @media (prefers-reduced-motion: reduce) {
-  .video-tile--switched, .video-tile--switched::after, .switch-feedback { animation: none !important; }
+  .video-tile--switched, .video-tile--switched::after, .switch-feedback, .speed-bonus-popup { animation: none !important; }
   .video-tile--switched::after, .switch-feedback { opacity: 1; transform: none; }
   .switch-feedback b { transform: none; }
 }
 @keyframes switch-damage-vignette { 0% { opacity: 0; } 14% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes switch-camera-shake { 0%, 100% { transform: translate(0); } 18% { transform: translate(-8px, 3px); } 36% { transform: translate(7px, -4px); } 55% { transform: translate(-6px, -2px); } 74% { transform: translate(4px, 3px); } }
 @keyframes switch-feedback-pop { 0% { opacity: 0; transform: scale(.45); } 16% { opacity: 1; transform: scale(1.15); } 32% { transform: scale(.96); } 100% { opacity: 0; transform: scale(1.04); } }
+.speed-bonus-popup { align-items: center; animation: speed-bonus-pop 1.8s steps(5, end) both; background: #e1ff4f; border: 5px solid #100b19; box-shadow: 7px 7px 0 #b56e14, inset 0 4px #fff7af, inset 0 -5px #9fbb27; color: #211033; display: flex; flex-direction: column; font-family: var(--pixel-font); gap: 5px; left: 50%; min-width: 240px; padding: 12px 18px 10px; pointer-events: none; position: fixed; text-align: center; top: 25%; transform: translateX(-50%); z-index: 30; }.speed-bonus-popup b { font-size: 12px; letter-spacing: .08em; }.speed-bonus-popup strong { color: #7d215e; font-family: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif; font-size: 32px; letter-spacing: .06em; line-height: .8; text-shadow: 2px 2px #ffb54c; }.speed-bonus-popup small { color: #39304e; font-size: 7px; letter-spacing: .08em; } @keyframes speed-bonus-pop { 0% { opacity: 0; transform: translateX(-50%) scale(.35) rotate(-7deg); } 12%, 68% { opacity: 1; transform: translateX(-50%) scale(1.08) rotate(0); } 80% { transform: translateX(-50%) scale(.96); } 100% { opacity: 0; transform: translateX(-50%) translateY(-22px) scale(1); } }
 
 /* Gameplay arcade system: each live surface receives a distinct cabinet color. */
 .media-room--game { background-color: #09091b; background-image: repeating-linear-gradient(90deg, transparent 0 23px, rgba(113, 223, 250, .06) 23px 25px), repeating-linear-gradient(0deg, transparent 0 23px, rgba(241, 135, 241, .055) 23px 25px); }
