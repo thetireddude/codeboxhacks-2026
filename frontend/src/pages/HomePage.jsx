@@ -176,8 +176,10 @@ export function HomePage() {
     if (!socket) {
       socket = io(appConfig.backendUrl, {
         autoConnect: false,
-        // Avoid a polling-to-WebSocket upgrade in the middle of a live round.
-        transports: ["websocket"],
+        // Flask-SocketIO's threaded development server is reachable through a
+        // Cloudflare quick tunnel over polling. Do not require a WebSocket
+        // upgrade, which would otherwise drop live transcript events.
+        transports: ["polling"],
         reconnection: true,
         reconnectionDelay: 500,
         reconnectionDelayMax: 2000,

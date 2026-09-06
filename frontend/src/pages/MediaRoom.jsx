@@ -51,7 +51,7 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [scenario, setScenario] = useState(null);
   const [transcript, setTranscript] = useState([]);
-  const [partialTranscript, setPartialTranscript] = useState("");
+  const [partialSpeech, setPartialSpeech] = useState(null);
   const [transcriptionStatus, setTranscriptionStatus] = useState("Waiting for the round to start.");
   const [switchesRemaining, setSwitchesRemaining] = useState({ A: 0, B: 0 });
   const [captureCycle, setCaptureCycle] = useState(0);
@@ -81,7 +81,7 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
     setSwitchFeedback({ eventId: event.id, targetPlayer: event.target_player_id });
     switchFeedbackTimerRef.current = window.setTimeout(() => setSwitchFeedback(null), 1800);
     if (event.target_player_id === localPlayer) {
-      setPartialTranscript("");
+      setPartialSpeech(null);
       setTranscriptionStatus("Switch received — starting your replacement response…");
       setCaptureCycle((current) => current + 1);
     }
@@ -127,7 +127,7 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
       }
       if (payload.event?.type !== "speech") return;
       setTranscript((current) => current.some((line) => line.id === payload.event.id) ? current : [...current, payload.event]);
-      setPartialTranscript("");
+      setPartialSpeech((current) => current?.speechId === payload.event.id ? null : current);
     };
     const onSwitchTriggered = (payload) => {
       if (payload.match_id !== match.match_id) return;
@@ -142,7 +142,12 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
       setErrorMessage(payload.message ?? "Switch was rejected.");
     };
     const onPartial = (payload) => {
-      if (payload.player_id === localPlayer) setPartialTranscript(payload.text ?? "");
+      if (payload.match_id !== match.match_id || !payload.speech_id || !payload.player_id) return;
+      setPartialSpeech({
+        speechId: payload.speech_id,
+        playerId: payload.player_id,
+        text: payload.text ?? "",
+      });
     };
     const onEnd = (payload) => {
       if (payload.match_id !== match.match_id) return;
@@ -478,9 +483,9 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
           {isInRound && <section className="round-log" aria-label="Live scene transcript">
             <header><span>LIVE SCENE TRANSCRIPT</span><b>{round?.active_player_id === localPlayer ? "YOUR TURN" : `PLAYER ${round?.active_player_id ?? "?"} SPEAKING`}</b></header>
             <div className="round-log__entries">
-              {transcript.length === 0 && !partialTranscript && <p className="round-log__entry round-log__entry--round">LISTENING FOR THE FIRST LINE…</p>}
+              {transcript.length === 0 && !partialSpeech && <p className="round-log__entry round-log__entry--round">LISTENING FOR THE FIRST LINE…</p>}
               {transcript.map((line) => line.type === "switch" ? <p key={line.id} className="round-log__entry round-log__entry--switch">↯ PLAYER {line.from_player_id} SWITCHED PLAYER {line.target_player_id}</p> : <p key={line.id} className={line.accepted ? "round-log__entry" : "round-log__entry round-log__entry--interrupted"}><strong>PLAYER {line.player_id}:</strong> {line.text}</p>)}
-              {partialTranscript && <p className="round-log__entry round-log__entry--active"><strong>PLAYER {localPlayer}:</strong> {partialTranscript}</p>}
+              {partialSpeech?.text && <p className="round-log__entry round-log__entry--active"><strong>PLAYER {partialSpeech.playerId}:</strong> {partialSpeech.text}</p>}
             </div>
           </section>}
 
