@@ -33,3 +33,7 @@ class AppConfig:
     TURN_END_SILENCE_MS = _as_int("TURN_END_SILENCE_MS", 900)
     SWITCH_MODE = os.getenv("SWITCH_MODE", "ALWAYS_AVAILABLE_DURING_OPPONENT_TURN")
     CHAIN_SWITCH_WINDOW_MS = _as_int("CHAIN_SWITCH_WINDOW_MS", 500)
+
+    REDIS_URL = os.getenv("REDIS_URL") or "redis://localhost:6379/0"
+    REDIS_KEY_PREFIX = os.getenv("REDIS_KEY_PREFIX", "improv-faceoff")
+    USE_IN_MEMORY_REDIS = os.getenv("USE_IN_MEMORY_REDIS", "false").lower() == "true"

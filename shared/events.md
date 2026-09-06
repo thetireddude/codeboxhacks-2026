@@ -17,6 +17,12 @@ changing a required field is a breaking contract change.
 | `player:ready` | `{ match_id, guest_id }` | Confirm the client is ready. |
 | `switch:press` | `{ match_id, guest_id, request_id }` | Request a Switch; `request_id` supports idempotent handling. |
 
+## Socket acknowledgements
+
+| Event | Optional request payload | Response | Purpose |
+| --- | --- | --- | --- |
+| `guest:create` | `{ guest_id? }` | `{ ok, guest }` | Create or restore the anonymous guest identity bound to this socket before `queue:join`. |
+
 ## Server to client
 
 | Event | Required payload | Purpose |
