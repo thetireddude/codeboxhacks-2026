@@ -20,10 +20,152 @@ export function HomePage() {
   const [match, setMatch] = useState(null);
   const socketRef = useRef(null);
   const guestIdRef = useRef(window.localStorage.getItem("improv-faceoff:guest-id"));
+  const pixelSkyRef = useRef(null);
 
   const handleClick = (action) => setNotice(messages[action]);
 
   useEffect(() => () => socketRef.current?.disconnect(), []);
+
+  useEffect(() => {
+    const sky = pixelSkyRef.current;
+    if (!sky) return undefined;
+    const bodies = [];
+    let frame;
+    let lastTime;
+    let pointer = null;
+    const characters = [...sky.querySelectorAll(".pixel-character")];
+    const startingPositions = [[.11, .33], [.27, .39], [.72, .34], [.84, .48], [.43, .15], [.58, .42], [.18, .17], [.36, .55], [.68, .18], [.9, .23], [.49, .6], [.62, .56]];
+    const seedBodies = () => {
+      const width = sky.clientWidth || window.innerWidth;
+      const height = sky.clientHeight || window.innerHeight;
+      characters.forEach((element, index) => {
+        const [horizontal, vertical] = startingPositions[index];
+        bodies[index] = {
+          element,
+          radius: 16,
+          x: width * horizontal,
+          y: height * vertical,
+          vx: (index % 2 ? -1 : 1) * (28 + index * 5),
+          vy: index % 3 === 0 ? -20 : 20,
+          angle: index * 31,
+          spin: (index % 2 ? -1 : 1) * (35 + index * 9),
+        };
+        element.style.left = "0";
+        element.style.top = "0";
+      });
+    };
+    const render = (body) => {
+      body.element.style.transform = `translate3d(${Math.round(body.x - 8)}px, ${Math.round(body.y - 11)}px, 0) rotate(${Math.round(body.angle)}deg)`;
+      body.element.classList.toggle("is-flailing", Math.hypot(body.vx, body.vy) > 105);
+    };
+    const reflect = (body, normalX, normalY) => {
+      const speedTowardSurface = body.vx * normalX + body.vy * normalY;
+      if (speedTowardSurface >= 0) return;
+      body.vx -= speedTowardSurface * normalX * 1.82;
+      body.vy -= speedTowardSurface * normalY * 1.82;
+      body.spin += (normalX * body.vy - normalY * body.vx) * 0.18;
+    };
+    const tick = (time) => {
+      const elapsed = Math.min((time - (lastTime || time)) / 1000, 0.034);
+      lastTime = time;
+      const width = sky.clientWidth;
+      const height = sky.clientHeight;
+      bodies.forEach((body) => {
+        body.vx *= 0.993;
+        body.vy *= 0.993;
+        body.spin *= 0.992;
+        if (pointer) {
+          const pathX = pointer.x - pointer.previousX;
+          const pathY = pointer.y - pointer.previousY;
+          const pathLengthSquared = pathX * pathX + pathY * pathY;
+          const pathProgress = pathLengthSquared
+            ? Math.max(0, Math.min(1, ((body.x - pointer.previousX) * pathX + (body.y - pointer.previousY) * pathY) / pathLengthSquared))
+            : 1;
+          const hitX = pointer.previousX + pathX * pathProgress;
+          const hitY = pointer.previousY + pathY * pathProgress;
+          const dx = body.x - hitX;
+          const dy = body.y - hitY;
+          const distance = Math.hypot(dx, dy) || 1;
+          const cursorSpeed = Math.hypot(pointer.vx, pointer.vy);
+          if (distance < body.radius + 7 && cursorSpeed > 80) {
+            const normalX = dx / distance;
+            const normalY = dy / distance;
+            const relativeNormalSpeed = (body.vx - pointer.vx) * normalX + (body.vy - pointer.vy) * normalY;
+            if (relativeNormalSpeed < 0) {
+              const restitution = 0.92;
+              body.vx -= (1 + restitution) * relativeNormalSpeed * normalX;
+              body.vy -= (1 + restitution) * relativeNormalSpeed * normalY;
+              body.spin += (pointer.vx * normalY - pointer.vy * normalX) * 0.055;
+            }
+          }
+        }
+        body.x += body.vx * elapsed;
+        body.y += body.vy * elapsed;
+        body.angle += body.spin * elapsed;
+        if (body.x < body.radius) { body.x = body.radius; reflect(body, 1, 0); }
+        if (body.x > width - body.radius) { body.x = width - body.radius; reflect(body, -1, 0); }
+        if (body.y < body.radius) { body.y = body.radius; reflect(body, 0, 1); }
+        if (body.y > height - body.radius) { body.y = height - body.radius; reflect(body, 0, -1); }
+      });
+      for (let first = 0; first < bodies.length; first += 1) {
+        for (let second = first + 1; second < bodies.length; second += 1) {
+          const a = bodies[first];
+          const b = bodies[second];
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const distance = Math.hypot(dx, dy) || 1;
+          const minimum = a.radius + b.radius;
+          if (distance >= minimum) continue;
+          const normalX = dx / distance;
+          const normalY = dy / distance;
+          const overlap = (minimum - distance) / 2;
+          a.x -= normalX * overlap;
+          a.y -= normalY * overlap;
+          b.x += normalX * overlap;
+          b.y += normalY * overlap;
+          const relativeSpeed = (a.vx - b.vx) * normalX + (a.vy - b.vy) * normalY;
+          if (relativeSpeed < 0) {
+            const impulse = -(1.72 * relativeSpeed) / 2;
+            a.vx += impulse * normalX;
+            a.vy += impulse * normalY;
+            b.vx -= impulse * normalX;
+            b.vy -= impulse * normalY;
+            a.spin -= impulse * 0.3;
+            b.spin += impulse * 0.3;
+          }
+        }
+      }
+      bodies.forEach(render);
+      if (pointer) {
+        pointer.previousX = pointer.x;
+        pointer.previousY = pointer.y;
+      }
+      frame = window.requestAnimationFrame(tick);
+    };
+    const movePointer = ({ clientX, clientY, movementX = 0, movementY = 0 }) => {
+      const rect = sky.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+      pointer = {
+        x,
+        y,
+        previousX: pointer?.x ?? x - movementX,
+        previousY: pointer?.y ?? y - movementY,
+        vx: movementX * 30,
+        vy: movementY * 30,
+      };
+    };
+    const clearPointer = () => { pointer = null; };
+    seedBodies();
+    frame = window.requestAnimationFrame(tick);
+    window.addEventListener("pointermove", movePointer);
+    window.addEventListener("blur", clearPointer);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("pointermove", movePointer);
+      window.removeEventListener("blur", clearPointer);
+    };
+  }, []);
 
   const connectAndJoinQueue = () => {
     let socket = socketRef.current;
@@ -123,7 +265,7 @@ export function HomePage() {
                 <p className="queue-label queue-label--error">QUEUE CONNECTION INTERRUPTED</p>
                 <h1>LET&apos;S<br /><span>TRY THAT<br />AGAIN.</span></h1>
                 <p className="queue-copy">{notice || "The queue did not respond. No match was created and your place has been released."}</p>
-                <div className="queue-actions"><button className="match-button" type="button" onClick={startSearch}><span className="match-button__people">↻</span><span><strong>RETRY SEARCH</strong><small>REJOIN THE PUBLIC QUEUE</small></span></button><button className="cancel-link" type="button" onClick={returnHome}>BACK TO LOBBY</button></div>
+                <div className="queue-actions"><button className="match-button" type="button" onClick={startSearch}>RETRY</button><button className="cancel-link" type="button" onClick={returnHome}>LOBBY</button></div>
               </>
             ) : isFound ? (
               <>
@@ -131,7 +273,7 @@ export function HomePage() {
                 <h1>OPPONENT<br /><span>FOUND.</span></h1>
                 <p className="queue-copy">{match?.opponent?.display_name ?? "Your opponent"} is ready to improvise. Your shared prompt is being prepared.</p>
                 <div className="found-card"><span>YOU · PLAYER {match?.player_id ?? "?"}</span><b>VS</b><span>{match?.opponent?.display_name ?? "OPPONENT"}</span></div>
-                <div className="queue-actions"><button className="match-button" type="button" onClick={() => setScreen("media")}><span className="match-button__people">♟♟♟</span><span><strong>CONTINUE</strong><small>CHECK CAMERA + MIC</small></span></button><button className="cancel-link" type="button" onClick={returnHome}>CANCEL MATCH</button></div>
+                <div className="queue-actions"><button className="match-button" type="button" onClick={() => setScreen("media")}>CONTINUE</button><button className="cancel-link" type="button" onClick={returnHome}>CANCEL</button></div>
               </>
             ) : (
               <>
@@ -139,7 +281,7 @@ export function HomePage() {
                 <h1>SEARCHING FOR<br /><span>AN IMPROV<br />PARTNER...</span></h1>
                 <p className="queue-copy">You&apos;re in. We&apos;ll pair you with another player as soon as someone steps up to the stage.</p>
                 <div className="queue-meter" aria-label="Searching"><i /><i /><i /><i /><i /></div>
-                <div className="queue-actions"><button className="cancel-button" type="button" onClick={returnHome}>× CANCEL SEARCH</button></div>
+                <div className="queue-actions"><button className="cancel-button" type="button" onClick={returnHome}>CANCEL</button><button className="queue-help" type="button" onClick={() => setQueueState("error")}>TEST ERROR</button></div>
               </>
             )}
             <p className="home-notice matchmaking-notice" role="status" aria-live="polite">{notice}</p>
@@ -169,20 +311,33 @@ export function HomePage() {
           <div className="plant plant--left"><i /><i /><i /><i /></div>
           <div className="wall-graffiti">SAME<br />PEOPLE<br />DIFFERENT<br />STORIES</div>
         </div>
+        <div className="pixel-village" aria-hidden="true">
+          <span className="pixel-house pixel-house--left"><i className="pixel-roof" /><i className="pixel-chimney" /><i className="pixel-window pixel-window--one" /><i className="pixel-window pixel-window--two" /><i className="pixel-door" /></span>
+          <span className="pixel-house pixel-house--center"><i className="pixel-roof" /><i className="pixel-chimney" /><i className="pixel-window pixel-window--one" /><i className="pixel-window pixel-window--two" /><i className="pixel-door" /></span>
+          <span className="pixel-house pixel-house--right"><i className="pixel-roof" /><i className="pixel-chimney" /><i className="pixel-window pixel-window--one" /><i className="pixel-window pixel-window--two" /><i className="pixel-door" /></span>
+          <span className="pixel-theater"><i className="pixel-theater__sign">IMPROV</i><b className="pixel-theater__curtain" /><b className="pixel-performer pixel-performer--one" /><b className="pixel-performer pixel-performer--two" /></span>
+          <span className="pixel-tree pixel-tree--left" /><span className="pixel-tree pixel-tree--right" />
+        </div>
+        <div className="pixel-sky" aria-hidden="true">
+          <span className="pixel-moon" /><span className="pixel-cloud pixel-cloud--one" /><span className="pixel-cloud pixel-cloud--two" /><span className="pixel-spark pixel-spark--one" /><span className="pixel-spark pixel-spark--two" /><span className="pixel-spark pixel-spark--three" />
+        </div>
+        <div className="pixel-float-layer" ref={pixelSkyRef} aria-hidden="true">
+          <span className="pixel-character pixel-character--rocket"><i /></span><span className="pixel-character pixel-character--astronaut"><i /></span><span className="pixel-character pixel-character--mime"><i /></span><span className="pixel-character pixel-character--firefighter"><i /></span><span className="pixel-character pixel-character--pirate"><i /></span><span className="pixel-character pixel-character--ninja"><i /></span><span className="pixel-character pixel-character--alien"><i /></span><span className="pixel-character pixel-character--goblin"><i /></span><span className="pixel-character pixel-character--dog"><i /></span><span className="pixel-character pixel-character--turtle"><i /></span><span className="pixel-character pixel-character--camel"><i /></span><span className="pixel-character pixel-character--wizard"><i /></span>
+        </div>
 
         <section className="home-hero">
-          <div className="mask-pair" aria-hidden="true"><span className="mask-face mask-face--blue">● ●<i>⌣</i></span><span className="mask-face mask-face--pink">● ●<i>⌣</i></span></div>
+          <div className="mask-pair" aria-hidden="true">
+            <span className="mask-face mask-face--blue"><i className="mask-eye mask-eye--left" /><i className="mask-eye mask-eye--right" /><b className="mask-mouth" /></span>
+            <span className="mask-face mask-face--pink"><i className="mask-eye mask-eye--left" /><i className="mask-eye mask-eye--right" /><b className="mask-mouth" /></span>
+          </div>
           <h1>IMPROV<br /><span>FACEOFF</span></h1>
           <p className="home-hero__tagline">RANDOM SCENARIOS. REAL PEOPLE. NO SCRIPT.</p>
           <div className="hero-divider"><i /></div>
           <p className="home-hero__motto">THINK FAST. SAY YES. IMPROVISE.</p>
-          <button className="match-button" type="button" onClick={startSearch}>
-            <span className="match-button__people">♟♟♟</span>
-            <span><strong>MULTIPLAYER</strong><small>FIND A MATCH</small></span>
-          </button>
+          <button className="match-button" type="button" onClick={startSearch}>FIND MATCH</button>
           <div className="home-actions">
-            <button className="home-action home-action--gold" type="button" onClick={() => handleClick("leaderboard")}><span>♜</span> VIEW LEADERBOARD <b>→</b></button>
-            <button className="home-action home-action--blue" type="button" onClick={() => handleClick("modes")}><span>⌁</span> OTHER GAME MODES <b>→</b></button>
+            <button className="home-action home-action--gold" type="button" onClick={() => handleClick("leaderboard")}>RANKS</button>
+            <button className="home-action home-action--blue" type="button" onClick={() => handleClick("modes")}>MODES</button>
           </div>
           <p className="home-notice" role="status" aria-live="polite">{notice}</p>
         </section>
