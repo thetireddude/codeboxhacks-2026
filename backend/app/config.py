@@ -57,3 +57,6 @@ class AppConfig:
         "groups. Do not include a winner, scoring instruction, Switch rule, or "
         "gameplay modifier."
     )
+    REDIS_URL = os.getenv("REDIS_URL") or "redis://localhost:6379/0"
+    REDIS_KEY_PREFIX = os.getenv("REDIS_KEY_PREFIX", "improv-faceoff")
+    USE_IN_MEMORY_REDIS = os.getenv("USE_IN_MEMORY_REDIS", "false").lower() == "true"

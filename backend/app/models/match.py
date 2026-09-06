@@ -27,8 +27,8 @@ class MatchStatus(StrEnum):
 class SwitchInventory(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    A: int = Field(ge=0)
-    B: int = Field(ge=0)
+    A: int = Field(ge=0, le=5)
+    B: int = Field(ge=0, le=5)
 
 
 class MatchState(BaseModel):
