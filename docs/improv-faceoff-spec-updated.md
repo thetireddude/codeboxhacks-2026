@@ -488,6 +488,18 @@ intonation, or audio quality. Novelty, absurdity, and ornate vocabulary are not
 independent sources of points. The judge runs at temperature zero with a fixed
 seed, and every semantic score must be supported by transcript evidence.
 
+Each completed match also returns a per-player **rubric log**: the points and
+fixed rating label for Adaptability, Articulation, Coherence, Collaboration, and
+Speed, plus a one-sentence evidence-grounded overview. Rating labels are
+calculated by the backend from the standardized point bands so they remain
+consistent across future account history.
+
+On match completion, the backend automatically persists one feedback record for
+each player. The record is keyed by `match_id` and `guest_id` and stores total
+points, every skill's points and rating, the overview, what went well, what to
+improve, scoring version, timestamp, and the complete rubric log. This keeps
+future account/profile history independent of a live Gemini call.
+
 ---
 
 ## 9.2 Division of Scoring Responsibility

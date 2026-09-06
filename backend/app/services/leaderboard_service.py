@@ -16,6 +16,7 @@ from sqlalchemy import (
     MetaData,
     String,
     Table,
+    Text,
     and_,
     create_engine,
     desc,
@@ -65,6 +66,29 @@ match_scores = Table(
     Column("outcome", String(8), nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
+match_feedback = Table(
+    "match_feedback",
+    metadata,
+    Column("match_id", String(36), ForeignKey("matches.match_id"), primary_key=True),
+    Column("guest_id", String(36), ForeignKey("players.guest_id"), primary_key=True),
+    Column("scoring_version", String(40), nullable=False),
+    Column("total_score", Integer, nullable=False),
+    Column("adaptability_points", Integer, nullable=False),
+    Column("adaptability_rating", String(24), nullable=False),
+    Column("articulation_points", Integer, nullable=False),
+    Column("articulation_rating", String(24), nullable=False),
+    Column("coherence_points", Integer, nullable=False),
+    Column("coherence_rating", String(24), nullable=False),
+    Column("collaboration_points", Integer, nullable=False),
+    Column("collaboration_rating", String(24), nullable=False),
+    Column("speed_points", Integer, nullable=False),
+    Column("speed_rating", String(24), nullable=False),
+    Column("overview", Text, nullable=False),
+    Column("what_went_well", Text, nullable=False),
+    Column("what_to_improve", Text, nullable=False),
+    Column("rubric_log", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
 
 
 class UnavailableLeaderboardRepository:
@@ -75,6 +99,11 @@ class UnavailableLeaderboardRepository:
         raise LeaderboardUnavailableError("DATABASE_URL is not configured")
 
     def get_player_rank(self, guest_id: UUID) -> dict[str, Any] | None:
+        raise LeaderboardUnavailableError("DATABASE_URL is not configured")
+
+    def get_player_feedback(
+        self, guest_id: UUID, limit: int = 20
+    ) -> list[dict[str, Any]]:
         raise LeaderboardUnavailableError("DATABASE_URL is not configured")
 
 
@@ -147,9 +176,24 @@ class LeaderboardRepository:
                     if existing is None:
                         connection.execute(
                             match_scores.insert().values(
-                                match_id=match_id, created_at=completed_at, **entry
+                                match_id=match_id,
+                                created_at=completed_at,
+                                **{key: value for key, value in entry.items() if key != "result"},
                             )
                         )
+                    feedback = self._feedback_entry(
+                        match_id, guest_id, entry["result"], completed_at
+                    )
+                    existing_feedback = connection.execute(
+                        select(match_feedback.c.match_id).where(
+                            and_(
+                                match_feedback.c.match_id == match_id,
+                                match_feedback.c.guest_id == guest_id,
+                            )
+                        )
+                    ).first()
+                    if existing_feedback is None:
+                        connection.execute(match_feedback.insert().values(**feedback))
         except LeaderboardUnavailableError:
             raise
         except Exception as error:
@@ -192,6 +236,24 @@ class LeaderboardRepository:
             return self._serialize(row) if row else None
         except Exception as error:
             raise LeaderboardUnavailableError("Could not load player rank") from error
+
+    def get_player_feedback(
+        self, guest_id: UUID, limit: int = 20
+    ) -> list[dict[str, Any]]:
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        try:
+            query = (
+                select(match_feedback)
+                .where(match_feedback.c.guest_id == str(guest_id))
+                .order_by(desc(match_feedback.c.created_at))
+                .limit(limit)
+            )
+            with self._engine.connect() as connection:
+                rows = connection.execute(query).mappings().all()
+            return [self._serialize_feedback(row) for row in rows]
+        except Exception as error:
+            raise LeaderboardUnavailableError("Could not load player feedback") from error
 
     def _ranked_query(self):
         best_order = (
@@ -243,6 +305,29 @@ class LeaderboardRepository:
             "coherence": points.coherence,
             "collaboration": points.collaboration,
             "outcome": outcome,
+            "result": result,
+        }
+
+    def _feedback_entry(
+        self, match_id: str, guest_id: str, result, created_at: datetime
+    ) -> dict[str, Any]:
+        rubric_log = result.rubric_log.model_dump(mode="json")
+        skills = {
+            f"{name}_{field}": value
+            for name in ("adaptability", "articulation", "coherence", "collaboration", "speed")
+            for field, value in rubric_log[name].items()
+        }
+        return {
+            "match_id": match_id,
+            "guest_id": guest_id,
+            "scoring_version": self._scoring_version,
+            "total_score": result.total_points,
+            **skills,
+            "overview": rubric_log["overview"],
+            "what_went_well": result.highlight,
+            "what_to_improve": result.improvement,
+            "rubric_log": json.dumps(rubric_log, separators=(",", ":")),
+            "created_at": created_at,
         }
 
     @staticmethod
@@ -257,6 +342,27 @@ class LeaderboardRepository:
             "display_name": row["display_name"],
             "best_score": row["best_score"],
             "games_played": row["games_played"],
+        }
+
+    @staticmethod
+    def _serialize_feedback(row) -> dict[str, Any]:
+        return {
+            "match_id": row["match_id"],
+            "guest_id": row["guest_id"],
+            "scoring_version": row["scoring_version"],
+            "total_score": row["total_score"],
+            "skills": {
+                name: {
+                    "points": row[f"{name}_points"],
+                    "rating": row[f"{name}_rating"],
+                }
+                for name in ("adaptability", "articulation", "coherence", "collaboration", "speed")
+            },
+            "overview": row["overview"],
+            "what_went_well": row["what_went_well"],
+            "what_to_improve": row["what_to_improve"],
+            "rubric_log": json.loads(row["rubric_log"]),
+            "created_at": row["created_at"].isoformat(),
         }
 
     @staticmethod

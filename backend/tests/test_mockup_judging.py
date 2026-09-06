@@ -26,6 +26,7 @@ class FakeJudge:
                     },
                     "highlight": "Made a clear choice.",
                     "improvement": "Build with a partner sooner.",
+                    "overview": "Made a clear choice and left a usable scene direction.",
                 },
                 "player_b": {
                     "category_points": {
@@ -36,6 +37,7 @@ class FakeJudge:
                     },
                     "highlight": "Stayed available.",
                     "improvement": "Add dialogue to the scene.",
+                    "overview": "No accepted dialogue was available for detailed coaching.",
                 },
                 "highlight_events": [],
             }

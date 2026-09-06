@@ -3,7 +3,13 @@ from uuid import uuid4
 
 import pytest
 
-from app.models.results import CategoryPoints, MatchResults, PlayerResult
+from app.models.results import (
+    CategoryPoints,
+    MatchResults,
+    PlayerResult,
+    RubricCategoryLog,
+    RubricLog,
+)
 from app.services.leaderboard_service import (
     InvalidLeaderboardCursor,
     LeaderboardRepository,
@@ -21,9 +27,21 @@ def result(match_id, winner: str, a_score: int, b_score: int) -> MatchResults:
         )
 
     def player(score: int) -> PlayerResult:
+        categories = points(score)
+        rubric_log = RubricLog(
+            overview="A focused practice round.",
+            **{
+                category: RubricCategoryLog(
+                    points=value,
+                    rating="NO EVIDENCE" if value == 0 else "FUNCTIONAL",
+                )
+                for category, value in categories.model_dump().items()
+            },
+        )
         return PlayerResult(
             total_points=score,
-            category_points=points(score),
+            category_points=categories,
+            rubric_log=rubric_log,
             highlight="Good moment",
             improvement="Try again",
         )
@@ -59,6 +77,11 @@ def test_leaderboard_keeps_history_but_ranks_best_score_and_is_idempotent():
         (str(player_a), 50, 2),
     ]
     assert repository.get_player_rank(player_a)["rank"] == 2
+    feedback = repository.get_player_feedback(player_a)
+    assert len(feedback) == 2
+    assert feedback[0]["guest_id"] == str(player_a)
+    assert feedback[0]["what_went_well"] == "Good moment"
+    assert feedback[0]["skills"]["adaptability"]["points"] in {40, 50}
 
 
 def test_cursor_is_validated():

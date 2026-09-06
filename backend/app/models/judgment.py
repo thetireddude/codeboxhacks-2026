@@ -27,6 +27,7 @@ class JudgedPlayer(BaseModel):
     category_points: SemanticCategoryPoints
     highlight: str = Field(min_length=1, max_length=500)
     improvement: str = Field(min_length=1, max_length=500)
+    overview: str = Field(min_length=1, max_length=500)
 
 
 class JudgeHighlightEvent(BaseModel):

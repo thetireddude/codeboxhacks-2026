@@ -21,6 +21,7 @@ JUDGMENT = {
         },
         "highlight": "Turned the upside-down manual into a captain's ritual.",
         "improvement": "Invite the intern into the landing decision earlier.",
+        "overview": "Used a confident recovery to keep the scene moving.",
     },
     "player_b": {
         "category_points": {
@@ -31,6 +32,7 @@ JUDGMENT = {
         },
         "highlight": "Used the upside-down manual to raise the stakes.",
         "improvement": "Commit to a specific landing plan sooner.",
+        "overview": "Raised the stakes while leaving a clear opening for the partner.",
     },
     "highlight_events": [
         {
@@ -63,6 +65,10 @@ def test_merges_semantic_judgment_with_deterministic_speed_and_selects_winner():
     assert result.winner == "A"
     assert result.player_a.category_points.speed == 455
     assert result.player_a.total_points == 7455
+    assert result.player_a.rubric_log.overview == "Used a confident recovery to keep the scene moving."
+    assert result.player_a.rubric_log.articulation.rating == "STRONG"
+    assert result.player_a.rubric_log.speed.points == 455
+    assert result.player_a.rubric_log.speed.rating == "VERY LIMITED"
     assert result.player_b.category_points.speed == 0
     assert result.highlight_events[0].label == "GREAT RECOVERY"
 
