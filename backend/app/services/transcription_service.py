@@ -15,6 +15,7 @@ PartialCallback = Callable[[str, str], None]
 FinalCallback = Callable[[str, str], None]
 StartedCallback = Callable[[str], None]
 ErrorCallback = Callable[[str, str], None]
+ReadyCallback = Callable[[], None]
 
 
 class TranscriptionError(RuntimeError):
@@ -27,6 +28,7 @@ class TranscriptionCallbacks:
     on_partial: PartialCallback
     on_final: FinalCallback
     on_error: ErrorCallback
+    on_ready: ReadyCallback = lambda: None
 
 
 class TranscriptionSession:
@@ -151,6 +153,7 @@ class DeepgramSession(TranscriptionSession):
             if event == "EndOfTurn":
                 self._speech_id = None
                 self._discard_interrupted_turn = False
+                self._callbacks.on_ready()
             return
         if event == "StartOfTurn":
             # A new provider turn is the authoritative boundary after Switch.

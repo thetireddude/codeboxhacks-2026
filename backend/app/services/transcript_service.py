@@ -16,12 +16,15 @@ class ActiveSpeech:
     guest_id: UUID
     start_ms: int
     latest_text: str = ""
+    provider_text: str = ""
+    rejected_prefix: str = ""
 
 
 class TranscriptService:
     def __init__(self, game_service: GameService) -> None:
         self._game_service = game_service
         self._active: dict[str, ActiveSpeech] = {}
+        self._rejected_prefixes: dict[UUID, str] = {}
         self._lock = Lock()
 
     def speech_started(self, match_id: UUID, guest_id: UUID, speech_id: str) -> None:
@@ -32,7 +35,12 @@ class TranscriptService:
                 raise GameStateError("Speech is already active")
             if any(speech.match_id == match_id for speech in self._active.values()):
                 raise GameStateError("The match already has active speech")
-            self._active[speech_id] = ActiveSpeech(match_id, guest_id, start_ms)
+            self._active[speech_id] = ActiveSpeech(
+                match_id=match_id,
+                guest_id=guest_id,
+                start_ms=start_ms,
+                rejected_prefix=self._rejected_prefixes.pop(match_id, ""),
+            )
 
     def speech_partial(self, speech_id: str, text: str) -> None:
         cleaned_text = text.strip()
@@ -43,10 +51,14 @@ class TranscriptService:
             if speech is None:
                 raise GameStateError("Speech did not have an authoritative start")
             self._active[speech_id] = ActiveSpeech(
-                speech.match_id,
-                speech.guest_id,
-                speech.start_ms,
-                cleaned_text,
+                match_id=speech.match_id,
+                guest_id=speech.guest_id,
+                start_ms=speech.start_ms,
+                latest_text=_without_rejected_prefix(
+                    cleaned_text, speech.rejected_prefix
+                ),
+                provider_text=cleaned_text,
+                rejected_prefix=speech.rejected_prefix,
             )
 
     def speech_final(self, speech_id: str, text: str):
@@ -54,11 +66,14 @@ class TranscriptService:
             speech = self._active.pop(speech_id, None)
         if speech is None:
             raise GameStateError("Speech did not have an authoritative start")
+        cleaned_text = _without_rejected_prefix(text.strip(), speech.rejected_prefix)
+        if not cleaned_text:
+            raise GameStateError("Speech only repeated the response rejected by Switch")
         return self._game_service.finalize_speech(
             speech.match_id,
             speech.guest_id,
             speech_id,
-            text,
+            cleaned_text,
             speech.start_ms,
         )
 
@@ -115,4 +130,16 @@ class TranscriptService:
             )
             if active is not None and not is_replay:
                 self._active.pop(speech_id, None)
+                self._rejected_prefixes[match_id] = (
+                    speech.provider_text or speech.latest_text
+                )
             return match, event, is_replay, interrupted
+
+
+def _without_rejected_prefix(text: str, rejected_prefix: str) -> str:
+    """Remove a Flux cumulative hypothesis from the next response only."""
+    candidate = text.strip()
+    prefix = rejected_prefix.strip()
+    if not prefix or not candidate.casefold().startswith(prefix.casefold()):
+        return candidate
+    return candidate[len(prefix) :].lstrip(" \t\n.,;:—-")

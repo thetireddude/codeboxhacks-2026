@@ -145,3 +145,37 @@ def test_replacement_speech_only_credits_the_latest_repeated_switch():
     assert updated.switch_response_latencies[first_switch.id] is None
     assert updated.switch_response_latencies[second_switch.id] is not None
     assert updated.switch_response_latencies[second_switch.id] >= 0
+
+
+def test_rapid_switches_remove_cumulative_provider_text_from_each_replacement():
+    storage, match, player_a, player_b = _active_match()
+    transcript = TranscriptService(GameService(storage, round_duration_ms=60_000))
+
+    transcript.speech_started(match.match_id, player_a, "speech_one")
+    transcript.speech_partial("speech_one", "resp 1")
+    transcript.press_switch(match.match_id, player_b, "switch-request-1")
+
+    transcript.speech_started(match.match_id, player_a, "speech_two")
+    transcript.speech_partial("speech_two", "resp 1 resp 2")
+    _, second_switch, _, second_interrupted = transcript.press_switch(
+        match.match_id, player_b, "switch-request-2"
+    )
+
+    transcript.speech_started(match.match_id, player_a, "speech_three")
+    transcript.speech_partial("speech_three", "resp 1 resp 2 resp 3")
+    _, final_event = transcript.speech_final(
+        "speech_three", "resp 1 resp 2 resp 3"
+    )
+
+    events = storage.get_match(match.match_id).transcript_events
+    transcript_text = [event.text for event in events if event.type == "speech"]
+    print(f"cumulative transcript flow: {transcript_text}")
+    assert transcript_text == [
+        "resp 1",
+        "resp 2",
+        "resp 3",
+    ]
+    assert second_interrupted is not None
+    assert second_interrupted.text == "resp 2"
+    assert final_event.text == "resp 3"
+    assert events[3] == second_switch

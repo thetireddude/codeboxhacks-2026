@@ -64,6 +64,14 @@ def register_transcription_handlers(
     def stop_transcription() -> dict:
         return {"ok": True, "stopped": service.stop_stream(request.sid)}
 
+    @socketio.on("transcription:interrupt")
+    def interrupt_transcription() -> dict:
+        """Debug mic-check boundary; matches the production Switch interrupt."""
+        interrupted = service.interrupt_stream(request.sid)
+        if not interrupted:
+            return _error("STT_UNAVAILABLE", "No transcription stream is active")
+        return {"ok": True, "interrupted": True}
+
 
 def _callbacks(
     socket_id: str,
@@ -143,6 +151,9 @@ def _callbacks(
         on_final=final,
         on_error=lambda code, message: socketio.emit(
             "transcription:error", {"code": code, "message": message}, to=socket_id
+        ),
+        on_ready=lambda: socketio.emit(
+            "speech:ready", {"player_id": player_id}, to=socket_id
         ),
     )
 

@@ -11,71 +11,58 @@ function upsertLine(lines, payload, isFinal, id = payload.speech_id) {
   return lines.map((item, index) => (index === current ? { ...item, ...line } : item));
 }
 
-function removeRejectedPrefix(text, rejectedText) {
-  const candidate = (text ?? "").trim();
-  const rejected = (rejectedText ?? "").trim();
-  if (!rejected || !candidate.toLocaleLowerCase().startsWith(rejected.toLocaleLowerCase())) {
-    return candidate;
-  }
-  return candidate.slice(rejected.length).trim() || candidate;
-}
-
 export function SttTestPage() {
   const socketRef = useRef(null);
   const captureRef = useRef(null);
   const activeSpeechRef = useRef(null);
   const activeProviderSpeechIdRef = useRef(null);
-  const pendingSwitchRef = useRef(null);
+  const providerLineIdsRef = useRef(new Map());
+  const awaitingReplacementStartRef = useRef(false);
+  const replacementMayStartRef = useRef(false);
   const [status, setStatus] = useState("Ready to test your microphone.");
   const [error, setError] = useState("");
   const [lines, setLines] = useState([]);
   const [isListening, setIsListening] = useState(false);
+  const [isResponseReady, setIsResponseReady] = useState(true);
 
   useEffect(() => {
     const socket = io(appConfig.backendUrl, { autoConnect: false });
     socketRef.current = socket;
     socket.on("speech:started", (payload) => {
-      pendingSwitchRef.current = null;
+      if (
+        awaitingReplacementStartRef.current
+        && !replacementMayStartRef.current
+      ) return;
+      awaitingReplacementStartRef.current = false;
+      replacementMayStartRef.current = false;
+      setIsResponseReady(true);
       activeSpeechRef.current = payload.speech_id;
       activeProviderSpeechIdRef.current = payload.speech_id;
+      providerLineIdsRef.current.set(payload.speech_id, payload.speech_id);
       setLines((current) => upsertLine(current, payload, false));
     });
     socket.on("speech:partial", (payload) => {
-      const pendingSwitch = pendingSwitchRef.current;
-      if (pendingSwitch && pendingSwitch.speechId === payload.speech_id) {
-        if (performance.now() < pendingSwitch.readyAt) return;
-        pendingSwitchRef.current = null;
-        activeSpeechRef.current = pendingSwitch.replacementId;
-        setLines((current) => upsertLine(
-          current,
-          { ...payload, text: removeRejectedPrefix(payload.text, pendingSwitch.rejectedText) },
-          false,
-          pendingSwitch.replacementId,
-        ));
-        return;
-      }
-      activeSpeechRef.current = payload.speech_id;
+      if (awaitingReplacementStartRef.current) return;
+      const lineId = providerLineIdsRef.current.get(payload.speech_id)
+        ?? payload.speech_id;
+      activeSpeechRef.current = lineId;
       activeProviderSpeechIdRef.current = payload.speech_id;
-      setLines((current) => upsertLine(current, payload, false));
+      setLines((current) => upsertLine(current, payload, false, lineId));
     });
     socket.on("speech:final", (payload) => {
-      const pendingSwitch = pendingSwitchRef.current;
-      if (pendingSwitch && pendingSwitch.speechId === payload.speech_id) {
-        pendingSwitchRef.current = null;
-        if (performance.now() < pendingSwitch.readyAt) return;
-        activeSpeechRef.current = null;
-        setLines((current) => upsertLine(
-          current,
-          { ...payload, text: removeRejectedPrefix(payload.text, pendingSwitch.rejectedText) },
-          true,
-          pendingSwitch.replacementId,
-        ));
-        return;
-      }
+      if (awaitingReplacementStartRef.current) return;
+      const lineId = providerLineIdsRef.current.get(payload.speech_id)
+        ?? payload.speech_id;
       activeSpeechRef.current = null;
       activeProviderSpeechIdRef.current = null;
+      providerLineIdsRef.current.delete(payload.speech_id);
       // TODO(I5): The game HUD should use authoritative `turn:changed` alongside this final line.
-      setLines((current) => upsertLine(current, payload, true));
+      setLines((current) => upsertLine(current, payload, true, lineId));
+    });
+    socket.on("speech:ready", () => {
+      replacementMayStartRef.current = true;
+      setIsResponseReady(true);
+      setStatus("Ready for a new response.");
     });
     socket.on("transcription:error", (payload) => setError(payload.message));
 
@@ -91,7 +78,10 @@ export function SttTestPage() {
     setLines([]);
     activeSpeechRef.current = null;
     activeProviderSpeechIdRef.current = null;
-    pendingSwitchRef.current = null;
+    providerLineIdsRef.current.clear();
+    awaitingReplacementStartRef.current = false;
+    replacementMayStartRef.current = false;
+    setIsResponseReady(true);
     setStatus("Connecting to transcription…");
     socket.connect();
     try {
@@ -116,23 +106,21 @@ export function SttTestPage() {
     setStatus("Stopped. Start again whenever you like.");
   };
 
-  const selfSwitch = () => {
+  const selfSwitch = async () => {
     const lineId = activeSpeechRef.current;
     const providerSpeechId = activeProviderSpeechIdRef.current;
     if (!lineId || !providerSpeechId) {
       setStatus("Start speaking first, then trigger a Self Switch.");
       return;
     }
-    const rejectedText = lines.find((line) => line.id === lineId)?.text ?? "";
-    // The production path sends ForceEndTurn. This mock mirrors its boundary
-    // with a short stale-update guard and a new visual response line.
-    pendingSwitchRef.current = {
-      speechId: providerSpeechId,
-      replacementId: `${lineId}-replacement-${Date.now()}`,
-      rejectedText,
-      readyAt: performance.now() + appConfig.switchResponseMinMs,
-    };
+    // Force Flux to close the old turn. Until it emits a new speech:started,
+    // every old partial/final is discarded instead of being merged forward.
+    awaitingReplacementStartRef.current = true;
+    replacementMayStartRef.current = false;
+    setIsResponseReady(false);
     activeSpeechRef.current = null;
+    activeProviderSpeechIdRef.current = null;
+    providerLineIdsRef.current.delete(providerSpeechId);
     setLines((current) => [
       ...current.map((line) => (
         line.id === lineId
@@ -146,7 +134,15 @@ export function SttTestPage() {
         isFinal: true,
       },
     ]);
-    setStatus("Self Switch triggered — continue with a replacement response.");
+    setStatus("Self Switch triggered — clearing the previous response…");
+    const response = await new Promise((resolve) => {
+      socketRef.current.emit("transcription:interrupt", resolve);
+    });
+    if (!response?.ok) {
+      awaitingReplacementStartRef.current = false;
+      setIsResponseReady(true);
+      setError(response?.error?.message ?? "Could not interrupt transcription.");
+    }
   };
 
   return (
@@ -155,6 +151,9 @@ export function SttTestPage() {
         <p className="stt-test-label">DEEPGRAM · LIVE MIC CHECK</p>
         <h1>Test your<br /><span>voice.</span></h1>
         <p className="stt-test-status" role="status">{status}</p>
+        <p className={`stt-response-ready ${isResponseReady ? "is-ready" : "is-clearing"}`}>
+          {isResponseReady ? "● READY FOR NEXT RESPONSE" : "○ CLEARING PREVIOUS RESPONSE"}
+        </p>
         <div className="stt-test-actions">
           <button type="button" className="match-button" disabled={isListening} onClick={start}>
             START MIC
