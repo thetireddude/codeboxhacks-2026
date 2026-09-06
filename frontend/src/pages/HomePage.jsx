@@ -20,6 +20,7 @@ export function HomePage() {
   const [screen, setScreen] = useState("home");
   const [queueState, setQueueState] = useState("searching");
   const [match, setMatch] = useState(null);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const socketRef = useRef(null);
   const guestIdRef = useRef(window.localStorage.getItem("improv-faceoff:guest-id"));
   const queueRequestRef = useRef(false);
@@ -373,8 +374,28 @@ export function HomePage() {
       </header>
 
       <section className="neon-room" aria-label="Improv Faceoff home">
-        <button className="round-icon round-icon--left" type="button" onClick={() => handleClick("settings")} aria-label="Display settings">☼</button>
+        <button className="rules-button" type="button" onClick={() => setRulesOpen(true)}>RULES</button>
         <button className="round-icon round-icon--right" type="button" onClick={() => handleClick("profile")} aria-label="Guest profile">M</button>
+
+        {rulesOpen && (
+          <div className="rules-overlay" role="presentation" onClick={() => setRulesOpen(false)}>
+            <section className="rules-card" role="dialog" aria-modal="true" aria-labelledby="rules-title" onClick={(event) => event.stopPropagation()}>
+              <button className="rules-card__close" type="button" onClick={() => setRulesOpen(false)} aria-label="Close rules">×</button>
+              <p>HOW TO PLAY</p>
+              <h2 id="rules-title">ARENA RULES</h2>
+              <ol>
+                <li><b>TWO PLAYERS, ONE SCENE.</b> Receive a scenario and two roles.</li>
+                <li><b>TAKE TURNS SPEAKING.</b> Only the active player&apos;s microphone is live.</li>
+                <li><b>USE SWITCH WISELY.</b> Spend a Switch during your opponent&apos;s turn to take over.</li>
+                <li><b>BUILD THE SCENE.</b> Say yes, add ideas, and keep the story moving.</li>
+                <li><b>BEAT THE TIMER.</b> Gemini scores creativity, adaptability, collaboration, coherence, and speed.</li>
+                <li><b>QUEUE AGAIN.</b> Choose Next Match when the round ends.</li>
+              </ol>
+              <button className="rules-card__play" type="button" onClick={() => setRulesOpen(false)}>GOT IT</button>
+              <small>CLICK OUTSIDE TO CLOSE</small>
+            </section>
+          </div>
+        )}
 
         <div className="room-wall room-wall--left">
           <div className="wall-sign wall-sign--better">BETTER<br />PEOPLE<br />THROUGH<br />IMPROV</div>
