@@ -13,6 +13,22 @@ class ScenarioGenerationError(RuntimeError):
     """Raised when a playable scenario cannot be generated."""
 
 
+class MockScenarioService:
+    """Development provider used until Gemini credentials are configured."""
+
+    scenario = Scenario(
+        tone="wacky",
+        scenario=(
+            "Two astronauts discover that neither knows how to land the spaceship."
+        ),
+        player_a_role="Overconfident captain",
+        player_b_role="Intern pretending to know what they are doing",
+    )
+
+    def generate_scenario(self) -> Scenario:
+        return self.scenario
+
+
 class ScenarioService:
     """Generate one validated improv scenario with Gemini."""
 
@@ -108,12 +124,14 @@ class ScenarioService:
         }
 
 
-def create_scenario_service(config: Any) -> ScenarioService:
+def create_scenario_service(config: Any) -> ScenarioService | MockScenarioService:
     """Build the configured A1 scenario service at the application boundary."""
+    if not config["GEMINI_API_KEY"]:
+        return MockScenarioService()
     return ScenarioService(
-        api_key=config.GEMINI_API_KEY,
-        model=config.GEMINI_SCENARIO_MODEL,
-        max_attempts=config.GEMINI_SCENARIO_MAX_ATTEMPTS,
-        tone_pool=config.GEMINI_SCENARIO_TONES,
-        prompt_template=config.GEMINI_SCENARIO_PROMPT_TEMPLATE,
+        api_key=config["GEMINI_API_KEY"],
+        model=config["GEMINI_SCENARIO_MODEL"],
+        max_attempts=config["GEMINI_SCENARIO_MAX_ATTEMPTS"],
+        tone_pool=config["GEMINI_SCENARIO_TONES"],
+        prompt_template=config["GEMINI_SCENARIO_PROMPT_TEMPLATE"],
     )

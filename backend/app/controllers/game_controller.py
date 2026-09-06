@@ -9,15 +9,18 @@ from flask import request
 
 from app import socketio
 from app.services.game_service import GameService, GameStateError, SwitchRejectedError
+from app.services.match_integration_service import MatchIntegrationService
 from app.services.matchmaking_service import MatchmakingService
 from app.services.redis_service import StorageUnavailableError
 from app.views.socket_views import (
     match_error_payload,
+    results_ready_payload,
     round_end_payload,
     round_prepare_payload,
     round_start_payload,
     switch_rejected_payload,
     switch_triggered_payload,
+    transcript_event_payload,
     turn_changed_payload,
 )
 
@@ -27,6 +30,9 @@ def register_game_handlers(
     matchmaking_service: MatchmakingService,
     socket_guests: dict[str, str],
     countdown_duration_ms: int,
+    integration_service: MatchIntegrationService,
+    on_switch=None,
+    cleanup_delay_ms: int = 300_000,
 ) -> None:
     @socketio.on("player:ready")
     def player_ready(payload: dict | None) -> dict:
@@ -36,6 +42,7 @@ def register_game_handlers(
             )
             match, starts_countdown = game_service.player_ready(match_id, guest_id)
             if starts_countdown:
+                match = integration_service.prepare_round(match_id)
                 starts_at = datetime.now(UTC) + timedelta(
                     milliseconds=countdown_duration_ms
                 )
@@ -49,8 +56,10 @@ def register_game_handlers(
                     _run_round,
                     game_service,
                     matchmaking_service,
+                    integration_service,
                     match_id,
                     countdown_duration_ms,
+                    cleanup_delay_ms,
                 )
             return {"ok": True, "state": match.state.value}
         except (GameStateError, ValueError) as error:
@@ -100,6 +109,14 @@ def register_game_handlers(
                     "switch:triggered",
                     switch_triggered_payload(match, event, request_id),
                 )
+                _emit_to_match(
+                    matchmaking_service,
+                    match,
+                    "transcript:event",
+                    transcript_event_payload(match, event),
+                )
+                if on_switch is not None:
+                    on_switch(match_id, event)
             return {
                 "ok": True,
                 "event": event.model_dump(mode="json"),
@@ -159,6 +176,12 @@ def register_game_handlers(
                     "timestamp": datetime.now(UTC).isoformat(),
                 },
             )
+            socketio.start_background_task(
+                _cleanup_match_after_delay,
+                matchmaking_service,
+                match.match_id,
+                cleanup_delay_ms,
+            )
         except (GameStateError, StorageUnavailableError, ValueError):
             return
 
@@ -166,8 +189,10 @@ def register_game_handlers(
 def _run_round(
     game_service: GameService,
     matchmaking_service: MatchmakingService,
+    integration_service: MatchIntegrationService,
     match_id: UUID,
     countdown_duration_ms: int,
+    cleanup_delay_ms: int,
 ) -> None:
     socketio.sleep(countdown_duration_ms / 1000)
     try:
@@ -186,9 +211,31 @@ def _run_round(
             "round:end",
             round_end_payload(match, datetime.now(UTC).isoformat()),
         )
-        game_service.begin_scoring(match_id)
+        _match, results = integration_service.judge_round(match_id)
+        _emit_to_match(
+            matchmaking_service,
+            match,
+            "results:ready",
+            results_ready_payload(results),
+        )
+        socketio.start_background_task(
+            _cleanup_match_after_delay,
+            matchmaking_service,
+            match_id,
+            cleanup_delay_ms,
+        )
     except (GameStateError, StorageUnavailableError):
         # A disconnect or already-ended match makes this scheduled task obsolete.
+        return
+
+
+def _cleanup_match_after_delay(
+    matchmaking_service: MatchmakingService, match_id: UUID, cleanup_delay_ms: int
+) -> None:
+    socketio.sleep(cleanup_delay_ms / 1000)
+    try:
+        matchmaking_service.cleanup_match(match_id)
+    except StorageUnavailableError:
         return
 
 

@@ -1573,6 +1573,29 @@ Once the interfaces exist, all three developers branch off concurrently.
 - disconnect handling
 - LiveKit token generation
 
+### Current implementation status on `main`
+
+- **B1 — complete:** anonymous, socket-bound guests; Redis-backed queueing with
+  duplicate protection; A/B pairing; temporary match state; and `match:found`.
+- **B2 — complete for fake speech-end rounds:** ready/countdown, authoritative
+  configurable round timer, active-speaker/turn state, round end, scoring-state
+  transition, and basic disconnect notification. `turn:complete` is still the
+  development-only turn signal.
+- **B3 — complete for server validation:** five Switches per player,
+  listener-only validation, repeat Switches, timestamps, idempotency, inventory
+  updates, and Switch broadcasts/rejections. The optional chain-window settings
+  are configured but not enforced.
+- **B4 — complete:** match-derived LiveKit rooms and distinct, short-lived,
+  room-scoped participant credentials are available through Socket.IO and an
+  HTTP endpoint. The Socket.IO path is identity-bound; the HTTP endpoint still
+  needs equivalent session authentication before production use.
+- **B5 — complete for mocked service integration:** scenario providers prepare
+  the round; final match-bound STT speech is persisted/broadcast and completes
+  turns; Switches invoke the transcription hook; a deterministic mock judge
+  produces `results:ready`; and match state is cleaned up after a configurable
+  delay. Production Gemini judging and full interrupted-speech processing stay
+  with the A4/A5 integrations.
+
 ### Works against mocks
 
 Developer 1 does not need to wait for real transcription or finished UI.

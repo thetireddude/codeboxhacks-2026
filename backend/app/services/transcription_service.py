@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from queue import Empty, Full, Queue
 from threading import Lock, Thread
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from app.models.transcript import PlayerSlot
 
@@ -165,6 +165,7 @@ class TranscriptionService:
         self._turn_end_silence_ms = turn_end_silence_ms
         self._session_factory = session_factory or DeepgramSession
         self._sessions: dict[str, TranscriptionSession] = {}
+        self._switch_events: dict[UUID, list] = {}
 
     @property
     def max_chunk_bytes(self) -> int:
@@ -215,6 +216,10 @@ class TranscriptionService:
             return False
         session.stop()
         return True
+
+    def handle_switch(self, match_id: UUID, event) -> None:
+        """Preserve the B5 hook consumed by A4 interruption processing."""
+        self._switch_events.setdefault(match_id, []).append(event)
 
 
 def create_transcription_service(config) -> TranscriptionService:
