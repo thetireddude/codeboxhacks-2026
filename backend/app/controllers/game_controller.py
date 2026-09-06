@@ -11,6 +11,7 @@ from app import socketio
 from app.services.game_service import GameService, GameStateError, SwitchRejectedError
 from app.services.matchmaking_service import MatchmakingService
 from app.services.redis_service import StorageUnavailableError
+from app.services.transcript_service import TranscriptService
 from app.views.socket_views import (
     match_error_payload,
     round_end_payload,
@@ -27,6 +28,7 @@ def register_game_handlers(
     matchmaking_service: MatchmakingService,
     socket_guests: dict[str, str],
     countdown_duration_ms: int,
+    transcript_service: TranscriptService | None = None,
 ) -> None:
     @socketio.on("player:ready")
     def player_ready(payload: dict | None) -> dict:
@@ -51,6 +53,7 @@ def register_game_handlers(
                     matchmaking_service,
                     match_id,
                     countdown_duration_ms,
+                    transcript_service,
                 )
             return {"ok": True, "state": match.state.value}
         except (GameStateError, ValueError) as error:
@@ -168,6 +171,7 @@ def _run_round(
     matchmaking_service: MatchmakingService,
     match_id: UUID,
     countdown_duration_ms: int,
+    transcript_service: TranscriptService | None,
 ) -> None:
     socketio.sleep(countdown_duration_ms / 1000)
     try:
@@ -179,7 +183,22 @@ def _run_round(
             round_start_payload(match, game_service.round_duration_ms),
         )
         socketio.sleep(game_service.round_duration_ms / 1000)
+        truncated_events = (
+            transcript_service.finalize_round(match_id)
+            if transcript_service is not None
+            else []
+        )
         match = game_service.end_round(match_id)
+        for event in truncated_events:
+            _emit_to_match(
+                matchmaking_service,
+                match,
+                "transcript:event",
+                {
+                    "match_id": str(match.match_id),
+                    "event": event.model_dump(mode="json"),
+                },
+            )
         _emit_to_match(
             matchmaking_service,
             match,

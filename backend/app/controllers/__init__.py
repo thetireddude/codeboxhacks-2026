@@ -3,6 +3,7 @@ from flask import Flask
 from app.services.game_service import GameService
 from app.services.matchmaking_service import MatchmakingService
 from app.services.redis_service import InMemoryRedisService, RedisService
+from app.services.transcript_service import TranscriptService
 from app.services.transcription_service import create_transcription_service
 
 from .game_controller import register_game_handlers
@@ -25,12 +26,20 @@ def register_controllers(app: Flask) -> None:
     app.extensions["game_service"] = game_service
     app.extensions["socket_guests"] = socket_guests
     register_matchmaking_handlers(service, socket_guests)
+    transcript_service = TranscriptService(game_service)
     register_game_handlers(
         game_service,
         service,
         socket_guests,
         app.config["COUNTDOWN_DURATION_MS"],
+        transcript_service,
     )
     transcription_service = create_transcription_service(app.config)
     app.extensions["transcription_service"] = transcription_service
-    register_transcription_handlers(transcription_service)
+    app.extensions["transcript_service"] = transcript_service
+    register_transcription_handlers(
+        transcription_service,
+        transcript_service,
+        game_service,
+        service,
+    )

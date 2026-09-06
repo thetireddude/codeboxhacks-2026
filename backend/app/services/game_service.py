@@ -12,6 +12,7 @@ from app.models import (
     MatchStatus,
     PlayerSlot,
     Scenario,
+    SpeechEvent,
     SwitchEvent,
 )
 
@@ -100,6 +101,64 @@ class GameService:
             match = match.model_copy(update={"active_player_id": next_player})
             self._storage.save_match(match)
             return match
+
+    def begin_speech(self, match_id: UUID, guest_id: UUID) -> tuple[PlayerSlot, int]:
+        """Validate the authoritative speaker and capture a round-relative start."""
+        with self._lock:
+            match = self._require_active_speaker(match_id, guest_id)
+            return match.active_player_id, min(
+                self._elapsed_ms(match), self._round_duration_ms
+            )
+
+    def finalize_speech(
+        self,
+        match_id: UUID,
+        guest_id: UUID,
+        speech_id: str,
+        text: str,
+        start_ms: int,
+        *,
+        truncated_by_round_end: bool = False,
+    ) -> tuple[MatchState, SpeechEvent]:
+        """Persist an accepted speech line and advance to the next player."""
+        cleaned_text = text.strip()
+        if not cleaned_text:
+            raise GameStateError("Speech text cannot be empty")
+        with self._lock:
+            match = self._require_active_speaker(match_id, guest_id)
+            end_ms = (
+                self._round_duration_ms
+                if truncated_by_round_end
+                else min(
+                    self._round_duration_ms,
+                    max(start_ms, self._elapsed_ms(match)),
+                )
+            )
+            event = SpeechEvent(
+                type="speech",
+                id=speech_id,
+                player_id=match.active_player_id,
+                text=cleaned_text,
+                start_ms=start_ms,
+                end_ms=end_ms,
+                is_final=True,
+                accepted=True,
+                truncated_by_switch=False,
+                truncated_by_round_end=truncated_by_round_end,
+            )
+            next_player: PlayerSlot = (
+                match.active_player_id
+                if truncated_by_round_end
+                else "B" if match.active_player_id == "A" else "A"
+            )
+            match = match.model_copy(
+                update={
+                    "active_player_id": next_player,
+                    "transcript_events": [*match.transcript_events, event],
+                }
+            )
+            self._storage.save_match(match)
+            return match, event
 
     def press_switch(
         self, match_id: UUID, guest_id: UUID, request_id: str
@@ -204,6 +263,14 @@ class GameService:
         match = self._storage.get_match(match_id)
         if match is None:
             raise GameStateError("Match was not found")
+        return match
+
+    def _require_active_speaker(self, match_id: UUID, guest_id: UUID) -> MatchState:
+        match = self._require_match(match_id)
+        if match.state != MatchStatus.ROUND_ACTIVE:
+            raise GameStateError("Round is not active")
+        if guest_id != self._guest_for_slot(match, match.active_player_id):
+            raise GameStateError("Only the active speaker can provide speech")
         return match
 
     @staticmethod
