@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from threading import Lock
 from uuid import UUID
 
+from app.models import MatchState, SpeechEvent, SwitchEvent
 from app.services.game_service import GameService, GameStateError
 
 
@@ -25,6 +26,7 @@ class TranscriptService:
 
     def speech_started(self, match_id: UUID, guest_id: UUID, speech_id: str) -> None:
         _, start_ms = self._game_service.begin_speech(match_id, guest_id)
+        self._game_service.record_switch_response(match_id, guest_id, start_ms)
         with self._lock:
             if speech_id in self._active:
                 raise GameStateError("Speech is already active")
@@ -85,3 +87,32 @@ class TranscriptService:
             )
             events.append(event)
         return events
+
+    def press_switch(
+        self, match_id: UUID, guest_id: UUID, request_id: str
+    ) -> tuple[MatchState, SwitchEvent, bool, SpeechEvent | None]:
+        """Atomically reject any current partial before recording the Switch."""
+        with self._lock:
+            active = next(
+                (
+                    (speech_id, speech)
+                    for speech_id, speech in self._active.items()
+                    if speech.match_id == match_id
+                ),
+                None,
+            )
+            speech_id = active[0] if active else None
+            speech = active[1] if active else None
+            match, event, is_replay, interrupted = (
+                self._game_service.press_switch_with_interruption(
+                    match_id,
+                    guest_id,
+                    request_id,
+                    speech_id=speech_id,
+                    text=speech.latest_text if speech else None,
+                    start_ms=speech.start_ms if speech else None,
+                )
+            )
+            if active is not None and not is_replay:
+                self._active.pop(speech_id, None)
+            return match, event, is_replay, interrupted

@@ -12,6 +12,7 @@ from app.services.game_service import GameService, GameStateError, SwitchRejecte
 from app.services.matchmaking_service import MatchmakingService
 from app.services.redis_service import StorageUnavailableError
 from app.services.transcript_service import TranscriptService
+from app.services.transcription_service import TranscriptionService
 from app.views.socket_views import (
     match_error_payload,
     round_end_payload,
@@ -29,6 +30,7 @@ def register_game_handlers(
     socket_guests: dict[str, str],
     countdown_duration_ms: int,
     transcript_service: TranscriptService | None = None,
+    transcription_service: TranscriptionService | None = None,
 ) -> None:
     @socketio.on("player:ready")
     def player_ready(payload: dict | None) -> dict:
@@ -93,10 +95,38 @@ def register_game_handlers(
                 payload, matchmaking_service, request.sid
             )
             request_id = _required_request_id(payload)
-            match, event, is_replay = game_service.press_switch(
-                match_id, guest_id, request_id
-            )
+            if transcript_service is None:
+                match, event, is_replay = game_service.press_switch(
+                    match_id, guest_id, request_id
+                )
+                interrupted = None
+            else:
+                match, event, is_replay, interrupted = transcript_service.press_switch(
+                    match_id, guest_id, request_id
+                )
             if not is_replay:
+                if interrupted is not None:
+                    _emit_to_match(
+                        matchmaking_service,
+                        match,
+                        "transcript:event",
+                        {
+                            "match_id": str(match.match_id),
+                            "event": interrupted.model_dump(mode="json"),
+                        },
+                    )
+                target_guest_id = (
+                    match.player_a_id
+                    if event.target_player_id == "A"
+                    else match.player_b_id
+                )
+                target_guest = matchmaking_service.get_guest(target_guest_id)
+                if (
+                    transcription_service is not None
+                    and target_guest is not None
+                    and target_guest.socket_id
+                ):
+                    transcription_service.interrupt_stream(target_guest.socket_id)
                 _emit_to_match(
                     matchmaking_service,
                     match,

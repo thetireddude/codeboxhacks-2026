@@ -37,6 +37,10 @@ class TranscriptionSession:
     def stop(self) -> None:
         raise NotImplementedError
 
+    def interrupt(self) -> None:
+        """Begin a new provider utterance after a successful Switch."""
+        return None
+
 
 class DeepgramSession(TranscriptionSession):
     """One Flux WebSocket session. The SDK keeps its receive loop on a thread."""
@@ -86,6 +90,9 @@ class DeepgramSession(TranscriptionSession):
             connection = self._connection
         if connection is not None:
             connection.send_close_stream()
+
+    def interrupt(self) -> None:
+        self._speech_id = None
 
     def _run(self) -> None:
         try:
@@ -214,6 +221,13 @@ class TranscriptionService:
         if session is None:
             return False
         session.stop()
+        return True
+
+    def interrupt_stream(self, socket_id: str) -> bool:
+        session = self._sessions.get(socket_id)
+        if session is None:
+            return False
+        session.interrupt()
         return True
 
 

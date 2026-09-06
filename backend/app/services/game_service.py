@@ -160,10 +160,68 @@ class GameService:
             self._storage.save_match(match)
             return match, event
 
+    def record_switch_response(
+        self, match_id: UUID, guest_id: UUID, speech_start_ms: int
+    ) -> MatchState:
+        """Persist latency for the latest pending Switch and supersede older ones."""
+        with self._lock:
+            match = self._require_active_speaker(match_id, guest_id)
+            latencies = dict(match.switch_response_latencies)
+            pending = [
+                event
+                for event in match.transcript_events
+                if (
+                    event.type == "switch"
+                    and event.target_player_id == match.active_player_id
+                    and event.id not in latencies
+                    and event.timestamp_ms <= speech_start_ms
+                )
+            ]
+            for event in pending[:-1]:
+                latencies[event.id] = None
+            if pending:
+                latest = pending[-1]
+                latencies[latest.id] = speech_start_ms - latest.timestamp_ms
+            if latencies == match.switch_response_latencies:
+                return match
+            match = match.model_copy(update={"switch_response_latencies": latencies})
+            self._storage.save_match(match)
+            return match
+
     def press_switch(
         self, match_id: UUID, guest_id: UUID, request_id: str
     ) -> tuple[MatchState, SwitchEvent, bool]:
         """Apply a listener Switch and return whether it was previously accepted."""
+        match, event, is_replay, _ = self._apply_switch(
+            match_id, guest_id, request_id
+        )
+        return match, event, is_replay
+
+    def press_switch_with_interruption(
+        self,
+        match_id: UUID,
+        guest_id: UUID,
+        request_id: str,
+        *,
+        speech_id: str | None,
+        text: str | None,
+        start_ms: int | None,
+    ) -> tuple[MatchState, SwitchEvent, bool, SpeechEvent | None]:
+        """Apply a Switch and atomically place an interrupted speech before it."""
+        interrupted = None
+        if speech_id is not None and text is not None and start_ms is not None:
+            cleaned_text = text.strip()
+            if cleaned_text:
+                interrupted = (speech_id, cleaned_text, start_ms)
+        return self._apply_switch(match_id, guest_id, request_id, interrupted)
+
+    def _apply_switch(
+        self,
+        match_id: UUID,
+        guest_id: UUID,
+        request_id: str,
+        interrupted: tuple[str, str, int] | None = None,
+    ) -> tuple[MatchState, SwitchEvent, bool, SpeechEvent | None]:
         if not isinstance(request_id, str) or not request_id.strip():
             raise SwitchRejectedError("INVALID_PAYLOAD", "request_id is required")
 
@@ -178,7 +236,7 @@ class GameService:
                         "DUPLICATE_REQUEST",
                         "request_id was already used by the other player",
                     )
-                return match, existing_event, True
+                return match, existing_event, True, None
 
             if match.state != MatchStatus.ROUND_ACTIVE:
                 raise SwitchRejectedError("ROUND_NOT_ACTIVE", "Round is not active")
@@ -193,12 +251,29 @@ class GameService:
             if remaining < 1:
                 raise SwitchRejectedError("NO_SWITCHES_REMAINING", "No Switches remain")
 
+            timestamp_ms = min(self._elapsed_ms(match), self._round_duration_ms)
+            interrupted_event = None
+            if interrupted is not None:
+                speech_id, text, start_ms = interrupted
+                interrupted_event = SpeechEvent(
+                    type="speech",
+                    id=speech_id,
+                    player_id=match.active_player_id,
+                    text=text,
+                    start_ms=start_ms,
+                    end_ms=max(start_ms, timestamp_ms),
+                    is_final=True,
+                    accepted=False,
+                    truncated_by_switch=True,
+                    truncated_by_round_end=False,
+                )
+
             event = SwitchEvent(
                 type="switch",
                 id=f"switch_{uuid4().hex}",
                 from_player_id=switching_player,
                 target_player_id=match.active_player_id,
-                timestamp_ms=self._elapsed_ms(match),
+                timestamp_ms=timestamp_ms,
             )
             inventory = match.switches_remaining.model_copy(
                 update={switching_player: remaining - 1}
@@ -206,12 +281,16 @@ class GameService:
             match = match.model_copy(
                 update={
                     "switches_remaining": inventory,
-                    "transcript_events": [*match.transcript_events, event],
+                    "transcript_events": [
+                        *match.transcript_events,
+                        *([interrupted_event] if interrupted_event else []),
+                        event,
+                    ],
                 }
             )
             self._storage.save_match(match)
             self._storage.save_switch_request(match_id, request_id, event)
-            return match, event, False
+            return match, event, False, interrupted_event
 
     def end_round(self, match_id: UUID) -> MatchState:
         with self._lock:

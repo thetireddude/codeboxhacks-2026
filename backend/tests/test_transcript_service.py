@@ -91,3 +91,57 @@ def test_round_end_discards_speech_that_never_produced_text():
 
     assert transcript.finalize_round(match.match_id) == []
     assert storage.get_match(match.match_id).transcript_events == []
+
+
+def test_switch_rejects_partial_before_its_switch_event_and_keeps_turn_owner():
+    storage, match, player_a, player_b = _active_match()
+    game = GameService(storage, round_duration_ms=60_000)
+    transcript = TranscriptService(game)
+
+    transcript.speech_started(match.match_id, player_a, "speech_interrupted")
+    transcript.speech_partial("speech_interrupted", "I was about to say")
+    updated, switch, replayed, interrupted = transcript.press_switch(
+        match.match_id, player_b, "switch-request-1"
+    )
+
+    assert replayed is False
+    assert interrupted is not None
+    assert interrupted.model_dump() == {
+        "type": "speech",
+        "id": "speech_interrupted",
+        "player_id": "A",
+        "text": "I was about to say",
+        "start_ms": interrupted.start_ms,
+        "end_ms": switch.timestamp_ms,
+        "is_final": True,
+        "accepted": False,
+        "truncated_by_switch": True,
+        "truncated_by_round_end": False,
+    }
+    assert updated.active_player_id == "A"
+    assert updated.transcript_events == [interrupted, switch]
+    with pytest.raises(GameStateError, match="authoritative start"):
+        transcript.speech_final("speech_interrupted", "late provider final")
+
+
+def test_replacement_speech_only_credits_the_latest_repeated_switch():
+    storage, match, player_a, player_b = _active_match()
+    game = GameService(storage, round_duration_ms=60_000)
+    transcript = TranscriptService(game)
+
+    transcript.speech_started(match.match_id, player_a, "speech_first")
+    transcript.speech_partial("speech_first", "First answer")
+    _, first_switch, _, _ = transcript.press_switch(
+        match.match_id, player_b, "switch-request-1"
+    )
+    _, second_switch, _, interrupted = transcript.press_switch(
+        match.match_id, player_b, "switch-request-2"
+    )
+    assert interrupted is None
+
+    transcript.speech_started(match.match_id, player_a, "speech_replacement")
+    updated = storage.get_match(match.match_id)
+
+    assert updated.switch_response_latencies[first_switch.id] is None
+    assert updated.switch_response_latencies[second_switch.id] is not None
+    assert updated.switch_response_latencies[second_switch.id] >= 0

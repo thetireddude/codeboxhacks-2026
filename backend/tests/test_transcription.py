@@ -13,6 +13,7 @@ class FakeSession(TranscriptionSession):
         self.callbacks = callbacks
         self.audio = []
         self.stopped = False
+        self.interruptions = 0
         self.turn_end_silence_ms = _kwargs["turn_end_silence_ms"]
         self.instances.append(self)
 
@@ -21,6 +22,9 @@ class FakeSession(TranscriptionSession):
 
     def stop(self) -> None:
         self.stopped = True
+
+    def interrupt(self) -> None:
+        self.interruptions += 1
 
 
 class TestConfig(AppConfig):
@@ -192,3 +196,73 @@ def test_match_context_requires_guest_id_instead_of_raising_a_server_error():
         "code": "STT_UNAVAILABLE",
         "message": "guest_id is required when match_id is provided",
     }
+
+
+def test_switch_rejects_live_partial_then_resets_stt_for_replacement_speech():
+    FakeSession.instances.clear()
+    app = create_app(AuthoritativeTestConfig)
+    first_client = socketio.test_client(app)
+    second_client = socketio.test_client(app)
+    first_guest = first_client.emit("guest:create", {}, callback=True)["guest"]
+    second_guest = second_client.emit("guest:create", {}, callback=True)["guest"]
+    first_client.emit(
+        "queue:join", {"guest_id": first_guest["guest_id"]}, callback=True
+    )
+    paired = second_client.emit(
+        "queue:join", {"guest_id": second_guest["guest_id"]}, callback=True
+    )
+    match_id = paired["match_id"]
+    first_client.get_received()
+    second_client.get_received()
+    first_client.emit(
+        "player:ready",
+        {"match_id": match_id, "guest_id": first_guest["guest_id"]},
+        callback=True,
+    )
+    second_client.emit(
+        "player:ready",
+        {"match_id": match_id, "guest_id": second_guest["guest_id"]},
+        callback=True,
+    )
+    _wait_for(first_client, "round:start")
+    second_client.get_received()
+
+    assert first_client.emit(
+        "transcription:start",
+        {
+            "player_id": "A",
+            "match_id": match_id,
+            "guest_id": first_guest["guest_id"],
+        },
+        callback=True,
+    )["ok"]
+    session = FakeSession.instances[0]
+    session.callbacks.on_started("speech_before_switch")
+    session.callbacks.on_partial("speech_before_switch", "Wait, I can explain")
+
+    response = second_client.emit(
+        "switch:press",
+        {
+            "match_id": match_id,
+            "guest_id": second_guest["guest_id"],
+            "request_id": "live-switch-1",
+        },
+        callback=True,
+    )
+    assert response["ok"] is True
+    assert session.interruptions == 1
+    first_events = first_client.get_received()
+    interrupted = next(
+        event for event in first_events if event["name"] == "transcript:event"
+    )["args"][0]["event"]
+    assert interrupted["accepted"] is False
+    assert interrupted["truncated_by_switch"] is True
+    assert next(
+        event for event in first_events if event["name"] == "switch:triggered"
+    )["args"][0]["event"] == response["event"]
+
+    session.callbacks.on_started("speech_after_switch")
+    match = app.extensions["matchmaking_service"].get_match_for_guest(
+        UUID(first_guest["guest_id"])
+    )
+    assert response["event"]["id"] in match.switch_response_latencies

@@ -27,14 +27,15 @@ def register_controllers(app: Flask) -> None:
     app.extensions["socket_guests"] = socket_guests
     register_matchmaking_handlers(service, socket_guests)
     transcript_service = TranscriptService(game_service)
+    transcription_service = create_transcription_service(app.config)
     register_game_handlers(
         game_service,
         service,
         socket_guests,
         app.config["COUNTDOWN_DURATION_MS"],
         transcript_service,
+        transcription_service,
     )
-    transcription_service = create_transcription_service(app.config)
     app.extensions["transcription_service"] = transcription_service
     app.extensions["transcript_service"] = transcript_service
     register_transcription_handlers(
