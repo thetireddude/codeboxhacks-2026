@@ -1,16 +1,127 @@
 # Improv Faceoff
 
-Project foundation for the Improv Faceoff multiplayer improv-training MVP.
-Milestone 0 establishes runnable React and Flask applications plus the shared
-contracts that allow three developers to work independently. It intentionally
-does not implement matchmaking, gameplay, media, transcription, or AI calls.
+**Improv Faceoff** is a two-player, arcade-inspired improv game for practicing
+quick thinking, collaboration, and confident speaking. Match with another
+player, receive a shared scenario with distinct roles, perform a timed scene,
+handle surprise Switches, and receive post-round feedback.
 
-The product source of truth is
-[`docs/improv-faceoff-spec-updated.md`](docs/improv-faceoff-spec-updated.md).
+The project is designed for teens through young adults who want a low-pressure,
+social way to practice being more articulate and responsive in the moment.
 
-## Quick start
+## How a match works
 
-### Frontend
+1. **Find a match.** Anonymous players enter a real-time public queue.
+2. **Get ready.** Both players join a shared room and confirm they are ready.
+3. **Play the scene.** The app gives both players a scenario and a role. The
+   round runs on a server-authoritative timer while the live transcript records
+   the scene.
+4. **Use a Switch.** A Switch interrupts the current speaker and asks them to
+   pivot into something wacky, original, and still related to the scene.
+5. **See the results.** Gemini evaluates the completed transcript and the app
+   presents an arcade-style scorecard, coaching, and a path to the next match.
+
+## What is in the MVP
+
+- Two-player Socket.IO matchmaking with reconnect, leave, and requeue flows.
+- A shared, server-owned round state: readiness, countdown, timer, turns, and
+  Switch limits.
+- Live camera and microphone rooms through LiveKit.
+- Deepgram-backed speech-to-text that produces an authoritative live scene log.
+- Gemini-generated scenarios and Gemini post-round judging, with safe fallback
+  results if an AI request is unavailable.
+- Arcade-style React UI for the lobby, queue, media room, live scene, results,
+  leaderboard, and rules overlay.
+- Redis for short-lived matchmaking and game state, plus PostgreSQL-backed
+  leaderboard history.
+
+## Tech stack
+
+| Area | Technology |
+| --- | --- |
+| Frontend | React 18, Vite, React Router, Socket.IO Client, LiveKit React Components, Framer Motion |
+| Backend | Python, Flask, Flask-SocketIO, SQLAlchemy, Alembic |
+| Real-time state | Socket.IO and Redis |
+| Live media | LiveKit |
+| Speech-to-text | Deepgram |
+| AI | Google Gemini for scenario generation and post-round feedback |
+| Persistence | PostgreSQL |
+| Testing and quality | pytest, Ruff, ESLint, JSON Schema contract validation |
+
+## Architecture at a glance
+
+```text
+React + Vite browser
+        |  Socket.IO / HTTP
+        v
+Flask + Flask-SocketIO ---- Redis (queue and live match state)
+        |
+        +---- LiveKit (camera and microphone room)
+        +---- Deepgram (live transcription)
+        +---- Gemini (scenario generation and judging)
+        +---- PostgreSQL (leaderboard history)
+```
+
+The backend owns the round state and secrets. The frontend never receives AI,
+speech-to-text, or LiveKit server secrets.
+
+## Repository layout
+
+```text
+frontend/   React/Vite application and game UI
+backend/    Flask API, Socket.IO handlers, services, tests, and migrations
+shared/     Cross-team event contracts, JSON schemas, and fixtures
+docs/       Product spec, milestone history, implementation plans, and handoffs
+scripts/    Repository-level contract validation tools
+```
+
+## Run locally
+
+### Prerequisites
+
+- Node.js 20+
+- Python 3.11+
+- Redis
+- PostgreSQL (for durable leaderboard data)
+- LiveKit, Deepgram, and Gemini credentials for the full media/AI experience
+
+### 1. Configure local environment files
+
+Copy the templates and fill in only the values you have available. Never commit
+the resulting `.env` files or any credentials.
+
+```powershell
+Copy-Item backend\.env.example backend\.env
+Copy-Item frontend\.env.example frontend\.env
+```
+
+For a frontend running against a local backend, create `frontend/.env`:
+
+```env
+VITE_BACKEND_URL=http://localhost:5000
+```
+
+The backend `.env` template documents every setting. The usual full-stack
+configuration includes `REDIS_URL`, `DATABASE_URL`, `LIVEKIT_URL`,
+`LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `DEEPGRAM_API_KEY`, and
+`GEMINI_API_KEY`. Keep all of those values on the backend only.
+
+### 2. Start the backend
+
+```powershell
+cd backend
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+alembic -c alembic.ini upgrade head
+python run.py
+```
+
+The backend is available at <http://localhost:5000>. Check it with
+<http://localhost:5000/api/health>.
+
+### 3. Start the frontend
+
+In a second terminal:
 
 ```powershell
 cd frontend
@@ -18,170 +129,75 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:5173>. Use `npm run build` and `npm run lint` for CI-style
-verification.
+Open <http://localhost:5173>.
 
-### Backend
+## Environment and deployment
 
-```powershell
-cd backend
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python run.py
-```
-
-The API listens on <http://localhost:5000>; `GET /api/health` returns a JSON
-health response. No Redis, LiveKit, Gemini, or speech-to-text service is contacted
-in Milestone 0.
-
-### Deploy the multiplayer backend
-
-Players can open the frontend from any computer. Only the computer or cloud
-service hosting Flask needs integration credentials; keep every key below on
-that backend host and never put one in `frontend/.env` or a `VITE_*` variable.
-
-Before starting the backend host, copy `backend/.env.example` to `backend/.env`
-and set real values for `GEMINI_API_KEY`, `DEEPGRAM_API_KEY`, `LIVEKIT_URL`,
-`LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET`. Set `HOST=0.0.0.0` when the host
-must accept remote traffic, and set `CORS_ORIGINS` to the exact public frontend
-origin (for example, `https://play.example.com`). The host must also expose
-WebSocket/Socket.IO traffic and be reachable over HTTPS for remote microphone
-and camera access.
-
-Build the frontend with its public backend URL:
+For a real two-device match, host the backend where it can accept HTTPS and
+WebSocket connections. Set `HOST=0.0.0.0` and set `CORS_ORIGINS` to the exact
+public frontend origin. Build the frontend with its public backend URL:
 
 ```env
 # frontend/.env
 VITE_BACKEND_URL=https://api.example.com
 ```
 
-After deploying or changing backend environment variables, restart the backend
-and request `GET /api/ready`. It returns `ready` only when every required
-integration is configured; it never returns secret values. If a round reports
-that Gemini could not finish judging, inspect the backend-host logs for the
-underlying Gemini error (key, quota, model access, or network) rather than the
-browser console.
+The browser needs HTTPS to request camera and microphone access. The deployment
+must also provide Redis and PostgreSQL, configure the backend-only integration
+credentials, and support WebSocket upgrades.
 
-`GEMINI_JUDGE_MAX_ATTEMPTS` defaults to `2`: a successful judgment uses one
-request, while a malformed or transient Gemini response gets one fresh attempt.
-
-The repository-root `Dockerfile` is the production backend image. Build it from
-the repository root, configure the variables from `backend/.env.example` in the
-hosting platform, attach a persistent Redis service, and expose the platform's
-`PORT`. Gunicorn intentionally uses one threaded worker because Socket.IO
-connections are process-local while Redis owns shared match state.
-
-After deployment, require a real WebSocket upgrade—not a polling fallback:
+After deploying, confirm health, configuration readiness, and WebSocket-only
+Socket.IO connectivity:
 
 ```powershell
 cd backend
 python scripts/check_deployment.py https://api.example.com
 ```
 
-The probe checks `/api/health`, `/api/ready`, and a WebSocket-only Socket.IO
-handshake. Threaded Gunicorn plus the explicitly installed `simple-websocket`
-package provides WebSocket support; eventlet is not required.
-
-### Test Gemini scenario generation
-
-After copying `backend/.env.example` to `backend/.env`, set `GEMINI_API_KEY` and
-run this from `backend/`:
+## Useful local checks
 
 ```powershell
-python generate_scenario.py
-```
+# Frontend
+cd frontend
+npm run lint
+npm run build
 
-The command prints one validated scenario as formatted JSON. It makes one live
-Gemini request and may retry once if Gemini returns an invalid response or a
-temporary error.
+# Backend
+cd ../backend
+.venv\Scripts\python -m pytest -q
+.venv\Scripts\ruff check .
+.venv\Scripts\ruff format --check .
 
-### Test Gemini post-round judging
-
-With `GEMINI_API_KEY` configured, run this from `backend/`:
-
-```powershell
-python generate_judgment.py
-```
-
-The command submits the shared scenario and completed transcript fixture,
-including rejected speech, Switch events, and response timing metadata. It
-prints Gemini's validated semantic judgment; Speed points and final score
-aggregation remain the later A6 responsibility.
-
-### Enable live speech-to-text
-
-Create a free Deepgram account, generate an API key, and put it only in
-`backend/.env`:
-
-```env
-DEEPGRAM_API_KEY=your_key_here
-```
-
-The A2 stream accepts 16 kHz mono PCM16 audio over Socket.IO. It sends
-`speech:started`, `speech:partial`, and `speech:final` messages back to that
-socket. The browser must never receive the Deepgram key.
-
-The reusable browser capture function is
-`frontend/src/services/pcm16Capture.js`. It uses an AudioWorklet to resample a
-microphone to 16 kHz mono PCM16 and sends 80 ms chunks through Socket.IO.
-
-For a manual live check, run both applications and open
-<http://localhost:5173/stt-test>. This diagnostic page is separate from the
-game UI and displays Deepgram's partial and final transcript messages.
-
-### Contract validation
-
-From the repository root, after installing the backend requirements:
-
-```powershell
+# Shared contracts (from the repository root)
+cd ..
 python scripts/validate_contracts.py
 ```
 
-The validator checks every JSON file, validates each schema against its declared
-JSON Schema meta-schema, and validates all four fixtures.
+With a configured Gemini key, `backend/generate_scenario.py` and
+`backend/generate_judgment.py` are useful focused integration checks. With a
+configured Deepgram key, visit `/stt-test` in the frontend for speech-to-text
+diagnostics.
 
-## Shared contract boundary
-
-- `shared/schemas/` contains canonical JSON Schema Draft 2020-12 contracts.
-- `shared/fixtures/` contains mock data for frontend, backend, and AI/STT work.
-- `shared/events.md` defines the Socket.IO event names and payload ownership.
-- Runtime business logic must remain in `backend/app/services/`, not `shared/`.
-
-`mock-transcript.json` is a chronological array; every array item is validated
-against `transcript-event.json`.
-
-## Environment conventions
-
-Copy the relevant `.env.example` to `.env`. Never commit `.env` files or secrets.
-
-- Browser-exposed variables use the `VITE_` prefix and are never secrets.
-- Backend variables use uppercase snake case.
-- URLs include their scheme.
-- Durations end in `_MS`; counts end in `_COUNT`.
-- Boolean values are `true` or `false`.
-- Required future integration secrets are documented but blank by default.
-
-Root `.env.example` is the complete catalog. The frontend and backend templates
-contain only variables owned by that process.
-
-## Branch and pull-request conventions
+## Working as a team
 
 - Branch from `main` using `feat/<area>-<summary>`, `fix/<area>-<summary>`, or
-  `chore/<summary>`.
-- Keep each pull request owned by one workstream and compatible with shared
-  fixtures.
-- Use Conventional Commit subjects (`feat:`, `fix:`, `chore:`, `docs:`,
-  `test:`).
-- Any shared contract change must update its fixture, validator coverage, and
-  `shared/events.md` when relevant. Call out breaking changes in the PR.
-- Before review, run frontend lint/build, backend tests, and contract validation.
-- Do not commit directly to `main`; require one teammate review before merge.
+  `docs/<summary>`.
+- Keep one cohesive change per pull request and use conventional commit titles
+  such as `feat:`, `fix:`, `docs:`, or `test:`.
+- Before requesting review, run the relevant frontend, backend, and contract
+  checks above.
+- Changes to `shared/` must update the corresponding schema, fixture, and
+  `shared/events.md` when applicable.
+- Never commit directly to `main`; use a reviewed pull request.
 
-## Code conventions
+## Product references
 
-Frontend code is JavaScript/JSX checked by ESLint. Backend code follows PEP 8,
-uses type hints, is checked/formatted with Ruff, and is tested with pytest. Run
-`ruff check .` and `ruff format --check .` from `backend/`. Controllers coordinate
-inputs and outputs, views format responses, models validate data, and services
-own business rules and integrations.
+- [Current product specification](docs/improv-faceoff-spec-updated.md)
+- [Milestone breakdown and implementation history](docs/improv-faceoff-milestone-breakdown.md)
+- [Shared real-time event contract](shared/events.md)
+
+## Security note
+
+Do not put API keys in frontend code or `VITE_*` variables. If a credential was
+ever pasted into a chat, terminal, commit, or screenshot, revoke and replace it
+in the provider dashboard before continuing.
