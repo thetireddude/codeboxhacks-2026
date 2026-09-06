@@ -2,6 +2,15 @@ import { useEffect, useRef, useState } from "react";
 
 const initialDevices = { camera: true, microphone: true };
 
+const mockTranscript = [
+  { type: "speech", id: "speech_001", player_id: "A", text: "Relax, I have landed dozens of ships just like this one.", is_final: true, accepted: true },
+  { type: "speech", id: "speech_002", player_id: "B", text: "Then why are you holding the manual upside down?", is_final: true, accepted: true },
+  { type: "speech", id: "speech_003", player_id: "A", text: "Because the gravity controls are—", is_final: true, accepted: false, truncated_by_switch: true },
+  { type: "switch", id: "switch_001", from_player_id: "B", target_player_id: "A" },
+  { type: "speech", id: "speech_004", player_id: "A", text: "This is actually the captain's traditional pre-landing dance.", is_final: true, accepted: true },
+  { type: "speech", id: "speech_005", player_id: "B", text: "Then dance us toward the big green planet before we—", is_final: true, accepted: true, truncated_by_round_end: true },
+];
+
 function permissionMessage(error) {
   if (error?.name === "NotAllowedError") {
     return "Camera and microphone access was blocked. Allow both in your browser, then try again.";
@@ -26,6 +35,8 @@ export function MediaRoom({ onLeave }) {
   const [activePlayer, setActivePlayer] = useState("A");
   const [switches, setSwitches] = useState({ A: 5, B: 5 });
   const [roundLog, setRoundLog] = useState([]);
+  const [transcriptEvents, setTranscriptEvents] = useState([]);
+  const transcriptRef = useRef(null);
   const [localPlayer, setLocalPlayer] = useState("B");
   const [switchedPlayer, setSwitchedPlayer] = useState(null);
   const reactionTimerRef = useRef(null);
@@ -61,6 +72,18 @@ export function MediaRoom({ onLeave }) {
     const timer = window.setTimeout(() => setSecondsLeft((current) => current - 1), 1000);
     return () => window.clearTimeout(timer);
   }, [gamePhase, secondsLeft]);
+
+  useEffect(() => {
+    if (gamePhase !== "active") return undefined;
+    const transcriptTimer = window.setInterval(() => {
+      setTranscriptEvents((current) => current.length >= mockTranscript.length ? current : [...current, mockTranscript[current.length]]);
+    }, 2800);
+    return () => window.clearInterval(transcriptTimer);
+  }, [gamePhase]);
+
+  useEffect(() => {
+    if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
+  }, [transcriptEvents]);
 
   useEffect(() => {
     if (gamePhase !== "active") return;
@@ -120,6 +143,7 @@ export function MediaRoom({ onLeave }) {
     setActivePlayer("A");
     setSwitches({ A: 5, B: 5 });
     setRoundLog([{ kind: "round", text: "ROUND 1 READY · SCENARIO LOADED" }]);
+    setTranscriptEvents([]);
     setGamePhase("countdown");
   };
 
@@ -153,27 +177,25 @@ export function MediaRoom({ onLeave }) {
         <section className="media-room media-room--game" aria-label="Improv game room">
           <button className="round-icon round-icon--left" type="button" onClick={leaveRoom} aria-label="Leave game">×</button>
           <div className="game-stage">
-            <div className="media-heading media-heading--game"><p>LIVE SCENE · ROUND 1</p><h1>GET READY<br /><span>TO IMPROVISE.</span></h1></div>
-            <div className={`round-timer round-timer--${gamePhase}`}><span>{gamePhase === "ended" ? "ROUND OVER" : "TIME LEFT"}</span><b>{gamePhase === "ended" ? "00:00" : timerLabel}</b></div>
+            <div className="media-heading media-heading--game"><p>LIVE SCENE · ROUND 1</p></div>
+            <div className={`round-timer round-timer--${gamePhase}`}><span>TIME LEFT</span><b>{gamePhase === "ended" ? "00:00" : timerLabel}</b></div>
             <div className="video-grid game-video-grid">
               <article className={`video-tile video-tile--local ${activePlayer === localPlayer ? "video-tile--active" : ""} ${switchedPlayer === localPlayer ? "video-tile--switched" : ""}`}>
                 <video ref={previewRef} autoPlay muted playsInline className={hasPreview ? "" : "video-tile__hidden"} />
                 {!hasPreview && <div className="video-placeholder"><b>{localPlayerName}</b><span>CAMERA PREVIEW</span></div>}
                 <div className="video-tile__label"><span>{localPlayerName} · {localRole}</span><b>{activePlayer === localPlayer ? "● SPEAKING" : "○ LISTENING"}</b></div>
                 {switchedPlayer === localPlayer && <div className="switched-reaction">SWITCHED!</div>}
-                <div className="switch-count">SWITCHES <b>{switches[localPlayer]}</b></div>
-                <button type="button" className="switch-button" disabled={!localPlayerMaySwitch} onClick={pressSwitch}>↯ SWITCH <small>{localPlayerMaySwitch ? `INTERRUPT ${opponentName}` : activePlayer === localPlayer ? "WAIT FOR OPPONENT" : "ROUND NOT ACTIVE"}</small></button>
+                <div className="switch-actions"><div className="switch-count">SWITCHES <b>{switches[localPlayer]}</b></div><button type="button" className="switch-button" disabled={!localPlayerMaySwitch} onClick={pressSwitch}>↯ SWITCH <small>{localPlayerMaySwitch ? `INTERRUPT ${opponentName}` : activePlayer === localPlayer ? "WAIT FOR OPPONENT" : "ROUND NOT ACTIVE"}</small></button></div>
               </article>
               <article className={`video-tile video-tile--remote ${activePlayer === opponentPlayer ? "video-tile--active" : ""} ${switchedPlayer === opponentPlayer ? "video-tile--switched" : ""}`}>
                 <div className="video-placeholder"><b>{opponentName}</b><span>LIVEKIT VIDEO CONNECTING</span></div>
                 <div className="video-tile__label"><span>{opponentName} · {opponentRole}</span><b>{activePlayer === opponentPlayer ? "● SPEAKING" : "○ LISTENING"}</b></div>
                 {switchedPlayer === opponentPlayer && <div className="switched-reaction">SWITCHED!</div>}
-                <div className="switch-count">SWITCHES <b>{switches[opponentPlayer]}</b></div>
-                <button type="button" className="switch-button" disabled>↯ SWITCH <small>OPPONENT CONTROLS THIS</small></button>
+                <div className="switch-actions"><div className="switch-count">SWITCHES <b>{switches[opponentPlayer]}</b></div><button type="button" className="switch-button" disabled>↯ SWITCH <small>OPPONENT CONTROLS THIS</small></button></div>
               </article>
               {gamePhase === "countdown" && <div className="countdown-overlay" aria-live="assertive"><span>ROUND 1</span><b>{countdown || "GO!"}</b><small>THE SCENE STARTS NOW</small></div>}
             </div>
-            <section className="round-log" aria-label="Round activity log" aria-live="polite"><header><span>◫ SCENE LOG</span><b>{gamePhase === "ended" ? "ROUND COMPLETE" : activePlayer === "A" ? "PLAYER 7392 HAS THE FLOOR" : "YOU HAVE THE FLOOR"}</b></header><div className="round-log__entries">{roundLog.map((entry, index) => <p key={`${entry.text}-${index}`} className={`round-log__entry round-log__entry--${entry.kind} ${entry.kind === activePlayer && !entry.interrupted ? "round-log__entry--active" : ""} ${entry.interrupted ? "round-log__entry--interrupted" : ""}`}>{entry.kind === "A" ? <><strong>PLAYER 7392:</strong> {entry.text}</> : entry.kind === "B" ? <><strong>YOU:</strong> {entry.text}</> : entry.text}</p>)}</div></section>
+            <section className="round-log round-log--unified" aria-label="Scene log and live transcript" aria-live="polite"><header><span>◫ SCENE LOG · LIVE TRANSCRIPT</span><b>{gamePhase === "ended" ? "ROUND COMPLETE" : transcriptEvents.length < mockTranscript.length ? "LISTENING…" : "ROUND BUFFER COMPLETE"}</b></header><div className="round-log__entries" ref={transcriptRef}>{roundLog.filter((entry) => entry.kind !== "A" && entry.kind !== "B").map((entry, index) => <p key={`${entry.text}-${index}`} className={`round-log__entry round-log__entry--${entry.kind}`}>{entry.text}</p>)}{transcriptEvents.map((event) => { const playerName = event.player_id === "A" ? "PLAYER 7392" : "YOU"; if (event.type === "switch") return <p className="round-log__entry round-log__entry--switch" key={event.id}><strong>[SWITCH]</strong> YOU interrupted PLAYER 7392</p>; return <p className={`round-log__entry transcript-entry--${event.player_id} ${event.accepted === false ? "round-log__entry--interrupted" : ""}`} key={event.id}><strong>{playerName}:</strong> {event.text}{event.accepted === false && <em> · interrupted</em>}{event.truncated_by_round_end && <em> · round ended</em>}</p>; })}</div></section>
             <div className="mock-view-toggle" aria-label="Mock perspective selector"><span>MOCK VIEW</span><button type="button" className={localPlayer === "B" ? "mock-view-toggle__selected" : ""} onClick={() => setLocalPlayer("B")}>YOU · PLAYER B</button><button type="button" className={localPlayer === "A" ? "mock-view-toggle__selected" : ""} onClick={() => setLocalPlayer("A")}>PLAYER 7392 · PLAYER A</button></div>
           </div>
         </section>
