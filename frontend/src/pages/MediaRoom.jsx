@@ -1,300 +1,222 @@
+/* eslint-disable react/prop-types */
 import { useEffect, useRef, useState } from "react";
+import { Room, RoomEvent, Track } from "livekit-client";
 
-const initialDevices = { camera: true, microphone: true };
-
-const mockTranscript = [
-  { type: "speech", id: "speech_001", player_id: "A", text: "Relax, I have landed dozens of ships just like this one.", is_final: true, accepted: true },
-  { type: "speech", id: "speech_002", player_id: "B", text: "Then why are you holding the manual upside down?", is_final: true, accepted: true },
-  { type: "speech", id: "speech_003", player_id: "A", text: "Because the gravity controls are—", is_final: true, accepted: false, truncated_by_switch: true },
-  { type: "switch", id: "switch_001", from_player_id: "B", target_player_id: "A" },
-  { type: "speech", id: "speech_004", player_id: "A", text: "This is actually the captain's traditional pre-landing dance.", is_final: true, accepted: true },
-  { type: "speech", id: "speech_005", player_id: "B", text: "Then dance us toward the big green planet before we—", is_final: true, accepted: true, truncated_by_round_end: true },
-];
-
-const mockResults = {
-  winner: "B",
-  players: [
-    { id: "A", name: "PLAYER 7392", role: "CAPTAIN", total: 8_420, scores: { adaptability: 1_620, creativity: 1_740, speed: 1_560, coherence: 1_680, collaboration: 1_820 } },
-    { id: "B", name: "YOU", role: "INTERN", total: 9_180, scores: { adaptability: 1_920, creativity: 1_860, speed: 1_740, coherence: 1_820, collaboration: 1_840 } },
-  ],
-  highlights: ["Manual upside down", "Gravity controls", "Captain's pre-landing dance"],
-  bestMoment: "Then why are you holding the manual upside down?",
-  improvement: "Try a faster yes-and after your next switch.",
-};
-
-// eslint-disable-next-line react/prop-types
-function ResultsScreen({ onReplay, onLeave }) {
-  const winner = mockResults.players.find((player) => player.id === mockResults.winner);
-  const categories = [
-    ["Adaptability", "adaptability"],
-    ["Creativity", "creativity"],
-    ["Speed", "speed"],
-    ["Coherence", "coherence"],
-    ["Collaboration", "collaboration"],
-  ];
-
-  return (
-    <main className="results-page" aria-label="Round results">
-      <header className="guest-banner results-banner"><span className="guest-banner__spark">✦</span><span>ROUND 1 COMPLETE · JUDGING LOCKED IN</span><button className="guest-banner__claim" type="button" onClick={onLeave}>LEAVE</button></header>
-      <section className="results-stage">
-        <p className="results-kicker">ARCADE SCOREBOARD</p>
-        <h1>ROUND OVER</h1>
-        <p className="results-subtitle">THE SCENE HAS BEEN JUDGED</p>
-        <div className="results-winner"><span>WINNER</span><strong>{winner.name}</strong><small>{winner.role} · {winner.total.toLocaleString()} PTS</small></div>
-        <div className="scoreboard" role="table" aria-label="Player scores">
-          {mockResults.players.map((player) => (
-            <article className={`score-card ${player.id === mockResults.winner ? "score-card--winner" : ""}`} key={player.id} role="row">
-              <header><span>{player.id === mockResults.winner ? "★ WINNER" : "FINAL SCORE"}</span><b>{player.total.toLocaleString()}</b></header>
-              <h2>{player.name}</h2><p>{player.role}</p>
-              <div className="score-bars">{categories.map(([label, key]) => <div className="score-bar" key={key}><span>{label}</span><div><i style={{ width: `${Math.round((player.scores[key] / 2000) * 100)}%` }} /></div><b>{player.scores[key].toLocaleString()}</b></div>)}</div>
-            </article>
-          ))}
-        </div>
-        <div className="results-details">
-          <article><h2>HIGHLIGHTS</h2><ul>{mockResults.highlights.map((highlight) => <li key={highlight}>{highlight}</li>)}</ul></article>
-          <article><h2>BEST MOMENT</h2><p>“{mockResults.bestMoment}”</p></article>
-          <article><h2>LEVEL UP</h2><p>{mockResults.improvement}</p></article>
-        </div>
-        <div className="results-actions"><button type="button" className="results-button results-button--primary" onClick={onReplay}>▶ PLAY AGAIN</button><button type="button" className="results-button" onClick={onLeave}>BACK TO HOME</button></div>
-      </section>
-    </main>
-  );
+function requestCredentials(socket, matchId) {
+  return new Promise((resolve, reject) => {
+    socket.emit("media:credentials", { match_id: matchId }, (response) => {
+      if (response?.ok && response.credentials) {
+        resolve(response.credentials);
+        return;
+      }
+      reject(new Error(response?.error?.message ?? "Could not get secure room credentials."));
+    });
+  });
 }
 
-function permissionMessage(error) {
-  if (error?.name === "NotAllowedError") {
-    return "Camera and microphone access was blocked. Allow both in your browser, then try again.";
-  }
-  if (error?.name === "NotFoundError") {
-    return "We could not find a camera or microphone. Connect a device, then try again.";
-  }
-  return "We could not start your camera and microphone. Please try again.";
+function attachTrack(track, videoElement) {
+  if (track && videoElement) track.attach(videoElement);
 }
 
-// This callback stays local to the page flow and is supplied by HomePage.
-// eslint-disable-next-line react/prop-types
-export function MediaRoom({ onLeave }) {
-  const previewRef = useRef(null);
-  const streamRef = useRef(null);
-  const [permissionState, setPermissionState] = useState("idle");
+function connectionMessage(status) {
+  const messages = {
+    setup: "Enable your camera and microphone to join the secure match room.",
+    connecting: "Getting secure room credentials and connecting to LiveKit…",
+    waiting: "Media connected. Waiting for your opponent to finish their media check.",
+    countdown: "Both players are ready. The authoritative countdown has started.",
+    active: "LiveKit media connected. The match server controls the round.",
+    ended: "Round complete. Waiting for the scoring service.",
+  };
+  return messages[status] ?? "Preparing secure media.";
+}
+
+// I2 receives the real I1 match and persistent Socket.IO connection. I3-I6 own
+// scenario, transcript, Switch, and scoring integrations.
+export function MediaRoom({ match, guestId, socket, onLeave }) {
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+  const roomRef = useRef(null);
+  const [connectionState, setConnectionState] = useState("setup");
   const [errorMessage, setErrorMessage] = useState("");
-  const [devices, setDevices] = useState(initialDevices);
-  const [gamePhase, setGamePhase] = useState("setup");
-  const [countdown, setCountdown] = useState(3);
-  const [secondsLeft, setSecondsLeft] = useState(60);
-  const [activePlayer, setActivePlayer] = useState("A");
-  const [switches, setSwitches] = useState({ A: 5, B: 5 });
-  const [roundLog, setRoundLog] = useState([]);
-  const [transcriptEvents, setTranscriptEvents] = useState([]);
-  const transcriptRef = useRef(null);
-  const [localPlayer, setLocalPlayer] = useState("B");
-  const [switchedPlayer, setSwitchedPlayer] = useState(null);
-  const reactionTimerRef = useRef(null);
+  const [devices, setDevices] = useState({ camera: false, microphone: false });
+  const [hasLocalVideo, setHasLocalVideo] = useState(false);
+  const [hasRemoteVideo, setHasRemoteVideo] = useState(false);
+  const [countdown, setCountdown] = useState(null);
+  const [round, setRound] = useState(null);
+  const [secondsLeft, setSecondsLeft] = useState(0);
 
-  const stopPreview = () => {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    if (previewRef.current) previewRef.current.srcObject = null;
+  const localPlayer = match.player_id;
+  const opponentPlayer = localPlayer === "A" ? "B" : "A";
+  const opponentName = match.opponent?.display_name ?? "OPPONENT";
+  const isInRound = connectionState === "countdown" || connectionState === "active";
+
+  const detachMedia = () => {
+    const room = roomRef.current;
+    roomRef.current = null;
+    room?.disconnect(true);
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
   };
 
-  useEffect(() => stopPreview, []);
+  useEffect(() => {
+    const onPrepare = (payload) => {
+      if (payload.match_id !== match.match_id) return;
+      setConnectionState("countdown");
+      setCountdown(Math.max(0, Math.ceil((Date.parse(payload.starts_at) - Date.now()) / 1000)));
+    };
+    const onStart = (payload) => {
+      if (payload.match_id !== match.match_id) return;
+      setRound(payload);
+      setSecondsLeft(Math.max(0, Math.ceil((Date.parse(payload.started_at) + payload.duration_ms - Date.now()) / 1000)));
+      setConnectionState("active");
+      setCountdown(null);
+    };
+    const onEnd = (payload) => {
+      if (payload.match_id !== match.match_id) return;
+      setRound((current) => current ? { ...current, ended: true } : current);
+      setConnectionState("ended");
+    };
+    const onDisconnect = () => setErrorMessage("The match server disconnected. Leave and find a new match.");
+
+    socket.on("round:prepare", onPrepare);
+    socket.on("round:start", onStart);
+    socket.on("round:end", onEnd);
+    socket.on("disconnect", onDisconnect);
+    return () => {
+      socket.off("round:prepare", onPrepare);
+      socket.off("round:start", onStart);
+      socket.off("round:end", onEnd);
+      socket.off("disconnect", onDisconnect);
+      detachMedia();
+    };
+  }, [match.match_id, socket]);
 
   useEffect(() => {
-    if (previewRef.current && streamRef.current) {
-      previewRef.current.srcObject = streamRef.current;
-    }
-  }, [permissionState]);
-
-  useEffect(() => {
-    if (gamePhase !== "countdown" || countdown === 0) return undefined;
-    const timer = window.setTimeout(() => setCountdown((current) => current - 1), 1000);
+    if (connectionState !== "countdown" || countdown === null || countdown <= 0) return undefined;
+    const timer = window.setTimeout(() => setCountdown((value) => Math.max(0, value - 1)), 1000);
     return () => window.clearTimeout(timer);
-  }, [countdown, gamePhase]);
+  }, [connectionState, countdown]);
 
   useEffect(() => {
-    if (gamePhase !== "countdown" || countdown !== 0) return;
-    setGamePhase("active");
-    setRoundLog([{ kind: "round", text: "ROUND 1 STARTED · 60 SECONDS ON THE CLOCK" }, { kind: "A", text: "Relax, I have landed dozens of ships just like this one." }]);
-  }, [countdown, gamePhase]);
+    if (connectionState !== "active" || !round?.started_at) return undefined;
+    const updateTimer = () => {
+      setSecondsLeft(Math.max(0, Math.ceil((Date.parse(round.started_at) + round.duration_ms - Date.now()) / 1000)));
+    };
+    updateTimer();
+    const timer = window.setInterval(updateTimer, 250);
+    return () => window.clearInterval(timer);
+  }, [connectionState, round]);
 
-  useEffect(() => {
-    if (gamePhase !== "active" || secondsLeft === 0) return undefined;
-    const timer = window.setTimeout(() => setSecondsLeft((current) => current - 1), 1000);
-    return () => window.clearTimeout(timer);
-  }, [gamePhase, secondsLeft]);
-
-  useEffect(() => {
-    if (gamePhase !== "active") return undefined;
-    const transcriptTimer = window.setInterval(() => {
-      setTranscriptEvents((current) => current.length >= mockTranscript.length ? current : [...current, mockTranscript[current.length]]);
-    }, 2800);
-    return () => window.clearInterval(transcriptTimer);
-  }, [gamePhase]);
-
-  useEffect(() => {
-    if (transcriptRef.current) transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
-  }, [transcriptEvents]);
-
-  useEffect(() => {
-    if (gamePhase !== "active") return;
-    if (secondsLeft === 49) {
-      setActivePlayer("B");
-      setRoundLog((current) => [...current, { kind: "turn", text: "TURN END · PLAYER A PASSES THE SCENE" }, { kind: "B", text: "Then why is the landing gear waving at us?" }]);
-    }
-    if (secondsLeft === 0) {
-      setActivePlayer(null);
-      setGamePhase("ended");
-      setRoundLog((current) => [...current, { kind: "round", text: "ROUND 1 OVER · THE SCENE IS COMPLETE" }]);
-    }
-  }, [gamePhase, secondsLeft]);
-
-  const requestDevices = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setErrorMessage("This browser does not support camera and microphone access.");
-      setPermissionState("error");
+  const connectMedia = async () => {
+    if (!socket.connected) {
+      setErrorMessage("The matchmaking connection is no longer available. Leave and find a new match.");
       return;
     }
 
-    setPermissionState("requesting");
+    setConnectionState("connecting");
     setErrorMessage("");
-    stopPreview();
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      streamRef.current = stream;
-      setDevices(initialDevices);
-      setPermissionState("ready");
+      const credentials = await requestCredentials(socket, match.match_id);
+      const room = new Room();
+      roomRef.current = room;
+
+      room.on(RoomEvent.LocalTrackPublished, (publication) => {
+        if (publication.source === Track.Source.Camera) {
+          attachTrack(publication.track, localVideoRef.current);
+          setHasLocalVideo(true);
+        }
+      });
+      room.on(RoomEvent.TrackSubscribed, (track) => {
+        if (track.kind === Track.Kind.Video) {
+          attachTrack(track, remoteVideoRef.current);
+          setHasRemoteVideo(true);
+        }
+      });
+      room.on(RoomEvent.TrackUnsubscribed, (track) => {
+        if (track.kind === Track.Kind.Video) setHasRemoteVideo(false);
+      });
+      room.on(RoomEvent.Disconnected, () => {
+        if (roomRef.current === room) setErrorMessage("Media connection closed. Leave and find a new match.");
+      });
+
+      await room.connect(credentials.url, credentials.token);
+      await room.localParticipant.enableCameraAndMicrophone();
+      const cameraPublication = room.localParticipant.getTrackPublication(Track.Source.Camera);
+      attachTrack(cameraPublication?.track, localVideoRef.current);
+      setHasLocalVideo(Boolean(cameraPublication?.track));
+      setDevices({ camera: true, microphone: true });
+
+      const ready = await new Promise((resolve) => {
+        socket.emit("player:ready", { match_id: match.match_id, guest_id: guestId }, resolve);
+      });
+      if (!ready?.ok) throw new Error("The match server could not mark you ready.");
+      setConnectionState("waiting");
     } catch (error) {
-      setErrorMessage(permissionMessage(error));
-      setPermissionState("error");
+      detachMedia();
+      setHasLocalVideo(false);
+      setHasRemoteVideo(false);
+      setDevices({ camera: false, microphone: false });
+      setConnectionState("setup");
+      setErrorMessage(error instanceof Error ? error.message : "Could not connect your media.");
     }
   };
 
-  const toggleDevice = (device) => {
-    const kind = device === "camera" ? "video" : "audio";
-    const nextEnabled = !devices[device];
-    streamRef.current?.getTracks().filter((track) => track.kind === kind).forEach((track) => {
-      track.enabled = nextEnabled;
-    });
-    setDevices((current) => ({ ...current, [device]: nextEnabled }));
+  const toggleDevice = async (device) => {
+    const participant = roomRef.current?.localParticipant;
+    if (!participant) return;
+    const enabled = !devices[device];
+    try {
+      if (device === "camera") await participant.setCameraEnabled(enabled);
+      else await participant.setMicrophoneEnabled(enabled);
+      setDevices((current) => ({ ...current, [device]: enabled }));
+      if (device === "camera") setHasLocalVideo(enabled);
+    } catch {
+      setErrorMessage(`Could not ${enabled ? "enable" : "disable"} your ${device}.`);
+    }
   };
 
   const leaveRoom = () => {
-    window.clearTimeout(reactionTimerRef.current);
-    stopPreview();
+    detachMedia();
     onLeave();
   };
 
-  const hasPreview = permissionState === "ready";
   const timerLabel = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}`;
-
-  const startRound = () => {
-    setCountdown(3);
-    setSecondsLeft(60);
-    setActivePlayer("A");
-    setSwitches({ A: 5, B: 5 });
-    setRoundLog([{ kind: "round", text: "ROUND 1 READY · SCENARIO LOADED" }]);
-    setTranscriptEvents([]);
-    setGamePhase("countdown");
-  };
-
-  const pressSwitch = () => {
-    const targetPlayer = activePlayer;
-    const opponentPlayer = localPlayer === "A" ? "B" : "A";
-    if (gamePhase !== "active" || targetPlayer !== opponentPlayer || switches[localPlayer] === 0) return;
-    setSwitches((current) => ({ ...current, [localPlayer]: current[localPlayer] - 1 }));
-    setRoundLog((current) => {
-      const interruptedIndex = [...current].map((entry, index) => ({ entry, index })).reverse().find(({ entry }) => entry.kind === targetPlayer && !entry.interrupted)?.index;
-      const nextLog = current.map((entry, index) => index === interruptedIndex ? { ...entry, interrupted: true } : entry);
-      const targetLabel = targetPlayer === "A" ? "PLAYER 7392" : "YOU";
-      const switcherLabel = localPlayer === "A" ? "PLAYER 7392" : "YOU";
-      return [...nextLog, { kind: "switch", text: `SWITCH · ${switcherLabel} INTERRUPPTS ${targetLabel}` }, { kind: targetPlayer, text: "— No, wait. The warning light is trying to tell us something." }];
-    });
-    window.clearTimeout(reactionTimerRef.current);
-    setSwitchedPlayer(targetPlayer);
-    reactionTimerRef.current = window.setTimeout(() => setSwitchedPlayer(null), 800);
-  };
-
-  if (gamePhase === "ended") return <ResultsScreen onReplay={startRound} onLeave={leaveRoom} />;
-
-  if (gamePhase !== "setup") {
-    const opponentPlayer = localPlayer === "A" ? "B" : "A";
-    const localPlayerName = localPlayer === "A" ? "PLAYER 7392" : "YOU";
-    const opponentName = opponentPlayer === "A" ? "PLAYER 7392" : "YOU";
-    const localRole = localPlayer === "A" ? "CAPTAIN" : "INTERN";
-    const opponentRole = opponentPlayer === "A" ? "CAPTAIN" : "INTERN";
-    const localPlayerMaySwitch = gamePhase === "active" && activePlayer === opponentPlayer && switches[localPlayer] > 0;
-    return (
-      <main className="media-page">
-        <header className="guest-banner"><span className="guest-banner__spark">✦</span><span>Round 1 · Two astronauts discover neither knows how to land the spaceship.</span><button className="guest-banner__claim" type="button" onClick={leaveRoom}>LEAVE</button></header>
-        <section className="media-room media-room--game" aria-label="Improv game room">
-          <button className="round-icon round-icon--left" type="button" onClick={leaveRoom} aria-label="Leave game">×</button>
-          <div className="game-stage">
-            <div className="media-heading media-heading--game"><p>LIVE SCENE · ROUND 1</p></div>
-            <div className={`round-timer round-timer--${gamePhase}`}><span>TIME LEFT</span><b>{gamePhase === "ended" ? "00:00" : timerLabel}</b></div>
-            <div className="video-grid game-video-grid">
-              <article className={`video-tile video-tile--local ${activePlayer === localPlayer ? "video-tile--active" : ""} ${switchedPlayer === localPlayer ? "video-tile--switched" : ""}`}>
-                <video ref={previewRef} autoPlay muted playsInline className={hasPreview ? "" : "video-tile__hidden"} />
-                {!hasPreview && <div className="video-placeholder"><b>{localPlayerName}</b><span>CAMERA PREVIEW</span></div>}
-                <div className="video-tile__label"><span>{localPlayerName} · {localRole}</span><b>{activePlayer === localPlayer ? "● SPEAKING" : "○ LISTENING"}</b></div>
-                {switchedPlayer === localPlayer && <div className="switched-reaction">SWITCHED!</div>}
-                <div className="switch-actions"><div className="switch-count">SWITCHES <b>{switches[localPlayer]}</b></div><button type="button" className="switch-button" disabled={!localPlayerMaySwitch} onClick={pressSwitch}>↯ SWITCH <small>{localPlayerMaySwitch ? `INTERRUPT ${opponentName}` : activePlayer === localPlayer ? "WAIT FOR OPPONENT" : "ROUND NOT ACTIVE"}</small></button></div>
-              </article>
-              <article className={`video-tile video-tile--remote ${activePlayer === opponentPlayer ? "video-tile--active" : ""} ${switchedPlayer === opponentPlayer ? "video-tile--switched" : ""}`}>
-                <div className="video-placeholder"><b>{opponentName}</b><span>LIVEKIT VIDEO CONNECTING</span></div>
-                <div className="video-tile__label"><span>{opponentName} · {opponentRole}</span><b>{activePlayer === opponentPlayer ? "● SPEAKING" : "○ LISTENING"}</b></div>
-                {switchedPlayer === opponentPlayer && <div className="switched-reaction">SWITCHED!</div>}
-                <div className="switch-actions"><div className="switch-count">SWITCHES <b>{switches[opponentPlayer]}</b></div><button type="button" className="switch-button" disabled>↯ SWITCH <small>OPPONENT CONTROLS THIS</small></button></div>
-              </article>
-              {gamePhase === "countdown" && <div className="countdown-overlay" aria-live="assertive"><span>ROUND 1</span><b>{countdown || "GO!"}</b><small>THE SCENE STARTS NOW</small></div>}
-            </div>
-            <section className="round-log round-log--unified" aria-label="Scene log and live transcript" aria-live="polite"><header><span>◫ SCENE LOG · LIVE TRANSCRIPT</span><b>{gamePhase === "ended" ? "ROUND COMPLETE" : transcriptEvents.length < mockTranscript.length ? "LISTENING…" : "ROUND BUFFER COMPLETE"}</b></header><div className="round-log__entries" ref={transcriptRef}>{roundLog.filter((entry) => entry.kind !== "A" && entry.kind !== "B").map((entry, index) => <p key={`${entry.text}-${index}`} className={`round-log__entry round-log__entry--${entry.kind}`}>{entry.text}</p>)}{transcriptEvents.map((event) => { const playerName = event.player_id === "A" ? "PLAYER 7392" : "YOU"; if (event.type === "switch") return <p className="round-log__entry round-log__entry--switch" key={event.id}><strong>[SWITCH]</strong> YOU interrupted PLAYER 7392</p>; return <p className={`round-log__entry transcript-entry--${event.player_id} ${event.accepted === false ? "round-log__entry--interrupted" : ""}`} key={event.id}><strong>{playerName}:</strong> {event.text}{event.accepted === false && <em> · interrupted</em>}{event.truncated_by_round_end && <em> · round ended</em>}</p>; })}</div></section>
-            <div className="mock-view-toggle" aria-label="Mock perspective selector"><span>MOCK VIEW</span><button type="button" className={localPlayer === "B" ? "mock-view-toggle__selected" : ""} onClick={() => setLocalPlayer("B")}>YOU · PLAYER B</button><button type="button" className={localPlayer === "A" ? "mock-view-toggle__selected" : ""} onClick={() => setLocalPlayer("A")}>PLAYER 7392 · PLAYER A</button></div>
-          </div>
-        </section>
-      </main>
-    );
-  }
 
   return (
     <main className="media-page">
       <header className="guest-banner">
         <span className="guest-banner__spark">✦</span>
-        <span>Media check · your camera and microphone stay in your control.</span>
+        <span>{isInRound ? "Round 1 · Live media connected." : "Media check · your camera and microphone stay in your control."}</span>
         <button className="guest-banner__claim" type="button" onClick={leaveRoom}>LEAVE</button>
       </header>
-      <section className="media-room" aria-label="Camera and microphone setup">
+      <section className={`media-room ${isInRound ? "media-room--game" : ""}`} aria-label="Camera and microphone setup">
         <button className="round-icon round-icon--left" type="button" onClick={leaveRoom} aria-label="Leave media setup">×</button>
-        <div className="media-stage">
-          <div className="media-heading">
-            <p>ROUND ONE · MEDIA CHECK</p>
-            <h1>GET READY<br /><span>TO IMPROVISE.</span></h1>
-            <div className="media-status"><i className={hasPreview ? "media-status__dot media-status__dot--ready" : "media-status__dot"} />{hasPreview ? "CAMERA + MIC READY" : "CAMERA + MIC REQUIRED"}</div>
+        <div className={isInRound ? "game-stage" : "media-stage"}>
+          <div className={`media-heading ${isInRound ? "media-heading--game" : ""}`}>
+            <p>{isInRound ? "LIVE SCENE · ROUND 1" : "ROUND ONE · MEDIA CHECK"}</p>
+            {!isInRound && <h1>GET READY<br /><span>TO IMPROVISE.</span></h1>}
+            {connectionState === "active" && <div className="round-timer"><span>TIME LEFT</span><b>{timerLabel}</b></div>}
           </div>
 
-          <div className="video-grid">
-            <article className="video-tile video-tile--local">
-              <video ref={previewRef} autoPlay muted playsInline className={hasPreview ? "" : "video-tile__hidden"} />
-              {!hasPreview && <div className="video-placeholder"><b>YOU</b><span>{permissionState === "requesting" ? "REQUESTING ACCESS…" : "CAMERA PREVIEW"}</span></div>}
-              <div className="video-tile__label"><span>YOU</span><b>{devices.microphone && hasPreview ? "● MIC ON" : "○ MIC OFF"}</b></div>
+          <div className={`video-grid ${isInRound ? "game-video-grid" : ""}`}>
+            <article className={`video-tile video-tile--local ${round?.active_player_id === localPlayer ? "video-tile--active" : ""}`}>
+              <video ref={localVideoRef} autoPlay muted playsInline className={hasLocalVideo ? "" : "video-tile__hidden"} />
+              {!hasLocalVideo && <div className="video-placeholder"><b>YOU</b><span>{connectionState === "connecting" ? "CONNECTING CAMERA…" : "CAMERA PREVIEW"}</span></div>}
+              <div className="video-tile__label"><span>YOU · PLAYER {localPlayer}</span><b>{devices.microphone ? "● MIC ON" : "○ MIC OFF"}</b></div>
             </article>
-            <article className="video-tile video-tile--remote">
-              <div className="video-placeholder"><b>PLAYER 7392</b><span>WAITING FOR LIVEKIT ROOM</span></div>
-              <div className="video-tile__label"><span>OPPONENT</span><b className="video-tile__waiting">⌁ CONNECTING</b></div>
+            <article className={`video-tile video-tile--remote ${round?.active_player_id === opponentPlayer ? "video-tile--active" : ""}`}>
+              <video ref={remoteVideoRef} autoPlay playsInline className={hasRemoteVideo ? "" : "video-tile__hidden"} />
+              {!hasRemoteVideo && <div className="video-placeholder"><b>{opponentName}</b><span>{connectionState === "waiting" ? "WAITING FOR OPPONENT MEDIA" : "LIVEKIT VIDEO CONNECTING"}</span></div>}
+              <div className="video-tile__label"><span>{opponentName} · PLAYER {opponentPlayer}</span><b className="video-tile__waiting">{hasRemoteVideo ? "● CONNECTED" : "⌁ CONNECTING"}</b></div>
             </article>
+            {connectionState === "countdown" && <div className="countdown-overlay" aria-live="assertive"><span>ROUND 1</span><b>{countdown || "GO!"}</b><small>THE SCENE STARTS NOW</small></div>}
           </div>
 
-          {hasPreview ? (
-            <div className="media-controls" aria-label="Media controls">
-              <button type="button" className={devices.microphone ? "media-control media-control--active" : "media-control"} onClick={() => toggleDevice("microphone")}>{devices.microphone ? "◉" : "◌"}<span>{devices.microphone ? "MUTE" : "UNMUTE"}</span></button>
-              <button type="button" className={devices.camera ? "media-control media-control--active" : "media-control"} onClick={() => toggleDevice("camera")}>{devices.camera ? "◉" : "◌"}<span>{devices.camera ? "CAMERA ON" : "CAMERA OFF"}</span></button>
-              <button type="button" className="media-control media-control--start" onClick={startRound}>▶<span>START MOCK ROUND</span></button>
-            </div>
-          ) : (
-            <div className="media-setup-actions"><button className="match-button media-permission-button" type="button" disabled={permissionState === "requesting"} onClick={requestDevices}><span className="match-button__people">◉</span><span><strong>{permissionState === "requesting" ? "REQUESTING ACCESS" : "ENABLE CAMERA + MIC"}</strong><small>YOU CONTROL WHAT YOU SHARE</small></span></button><button type="button" className="preview-round-button" onClick={startRound}>PREVIEW MOCK ROUND WITHOUT MEDIA →</button></div>
-          )}
-
+          {connectionState === "setup" && <div className="media-setup-actions"><button className="match-button media-permission-button" type="button" onClick={connectMedia}><span className="match-button__people">◉</span><span><strong>ENABLE CAMERA + MIC</strong><small>JOIN SECURE MEDIA ROOM</small></span></button></div>}
+          {connectionState === "connecting" && <p className="media-connection" role="status"><i />CONNECTING SECURE MEDIA…</p>}
+          {["waiting", "countdown", "active"].includes(connectionState) && <div className="media-controls" aria-label="Media controls"><button type="button" className={devices.microphone ? "media-control media-control--active" : "media-control"} onClick={() => toggleDevice("microphone")}>{devices.microphone ? "◉" : "○"}<span>{devices.microphone ? "MUTE" : "UNMUTE"}</span></button><button type="button" className={devices.camera ? "media-control media-control--active" : "media-control"} onClick={() => toggleDevice("camera")}>{devices.camera ? "◉" : "○"}<span>{devices.camera ? "CAMERA ON" : "CAMERA OFF"}</span></button></div>}
           {errorMessage && <p className="media-error" role="alert">{errorMessage}</p>}
-          <p className="media-connection" role="status"><i />WAITING FOR SECURE ROOM CREDENTIALS · LIVEKIT CONNECTS AFTER THE MATCH SERVICE PROVIDES A TOKEN.</p>
+          <p className="media-connection" role="status"><i />{connectionMessage(connectionState)}</p>
         </div>
       </section>
     </main>
