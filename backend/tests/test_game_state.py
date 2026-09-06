@@ -129,26 +129,35 @@ def test_ready_countdown_turns_and_authoritative_round_end():
     ) == {"ok": False}
 
 
-def test_judge_failure_notifies_both_players_instead_of_stalling():
+def test_judge_failure_still_returns_objective_round_results():
     app, first_client, second_client, first_guest, second_guest, match_id = (
         _paired_clients()
     )
 
-    def fail_judging(_match_id):
-        raise JudgeError("provider timeout")
+    class FailingJudge:
+        def judge(self, _judge_input):
+            raise JudgeError("provider timeout")
 
-    app.extensions["match_integration_service"].judge_round = fail_judging
+    app.extensions["match_integration_service"]._judge_service = FailingJudge()
     first_client.emit(
-        "player:ready", {"match_id": match_id, "guest_id": first_guest["guest_id"]}, callback=True
+        "player:ready",
+        {"match_id": match_id, "guest_id": first_guest["guest_id"]},
+        callback=True,
     )
     second_client.emit(
-        "player:ready", {"match_id": match_id, "guest_id": second_guest["guest_id"]}, callback=True
+        "player:ready",
+        {"match_id": match_id, "guest_id": second_guest["guest_id"]},
+        callback=True,
     )
 
-    first_error = _wait_for(first_client, "match:error")
-    second_error = _wait_for(second_client, "match:error")
-    assert first_error["code"] == "JUDGING_UNAVAILABLE"
-    assert second_error == first_error
+    first_results = _wait_for(first_client, "results:ready")
+    second_results = _wait_for(second_client, "results:ready")
+    assert first_results == second_results
+    assert first_results["results"]["player_a"]["highlight"].startswith(
+        "Gemini feedback was unavailable"
+    )
+    assert first_results["results"]["player_a"]["category_points"]["speed"] == 0
+    _wait_for_state(app, first_guest["guest_id"], MatchStatus.RESULTS)
 
 
 def test_disconnect_stops_an_active_round_and_notifies_opponent():

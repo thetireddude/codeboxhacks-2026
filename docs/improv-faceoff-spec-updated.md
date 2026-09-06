@@ -1337,6 +1337,16 @@ coaching, removes the unverifiable reference, and omits any highlight with no
 authoritative event remaining; a malformed optional highlight cannot discard a
 completed round's results.
 
+The judge makes one additional application-level attempt only when its first
+Gemini request fails or produces an invalid structured result. Successful
+rounds remain one request; this is separate from, and replaces, opaque SDK
+retry behavior.
+
+If both Gemini attempts fail, the completed match still emits `results:ready`.
+The fallback preserves deterministic A6 Speed points but assigns zero semantic
+points and clearly labels Gemini coaching as unavailable; it never fabricates
+AI feedback or leaves players stranded on a judging screen.
+
 Production scenario preparation requires `GEMINI_API_KEY`: it no longer falls
 back to a hardcoded scene when credentials are absent. Deterministic scenarios
 remain only in automated-test and standalone mock-judging paths.

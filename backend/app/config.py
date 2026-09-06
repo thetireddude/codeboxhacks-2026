@@ -45,9 +45,10 @@ class AppConfig:
     GEMINI_SCENARIO_MODEL = os.getenv("GEMINI_SCENARIO_MODEL", "gemini-3.1-flash-lite")
     GEMINI_SCENARIO_MAX_ATTEMPTS = _as_int("GEMINI_SCENARIO_MAX_ATTEMPTS", 2)
     GEMINI_JUDGE_MODEL = os.getenv("GEMINI_JUDGE_MODEL", "gemini-3.1-flash-lite")
-    # Keep post-round feedback responsive: the SDK retries are disabled below,
-    # and one well-formed structured attempt is sufficient for the mockup flow.
-    GEMINI_JUDGE_MAX_ATTEMPTS = _as_int("GEMINI_JUDGE_MAX_ATTEMPTS", 1)
+    # Keep SDK retries disabled, but retry one failed structured judgment. This
+    # protects live UUID-style transcripts from a transient/model-format miss
+    # without slowing successful rounds.
+    GEMINI_JUDGE_MAX_ATTEMPTS = _as_int("GEMINI_JUDGE_MAX_ATTEMPTS", 2)
     GEMINI_JUDGE_TIMEOUT_MS = _as_int("GEMINI_JUDGE_TIMEOUT_MS", 12_000)
 
     # A6 arcade-Speed curve. Points decay linearly per second after a Switch.

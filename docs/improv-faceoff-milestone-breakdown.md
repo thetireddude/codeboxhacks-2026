@@ -771,6 +771,12 @@ failures are logged on the backend host while both clients receive the safe
 Gemini highlight references are optional UI metadata. The backend now removes
 unknown live transcript IDs and drops an unverifiable highlight rather than
 discarding an otherwise valid semantic judgment, scores, and coaching feedback.
+The judge retries once only after a failed or invalid structured Gemini response;
+successful live rounds still make a single request.
+
+If Gemini remains unavailable, the live match still reaches `results:ready`
+using only deterministic Speed scoring and an explicit unavailable-feedback
+notice. This prevents a provider outage from interrupting a completed match.
 
 ---
 

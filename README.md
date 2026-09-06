@@ -63,6 +63,9 @@ that Gemini could not finish judging, inspect the backend-host logs for the
 underlying Gemini error (key, quota, model access, or network) rather than the
 browser console.
 
+`GEMINI_JUDGE_MAX_ATTEMPTS` defaults to `2`: a successful judgment uses one
+request, while a malformed or transient Gemini response gets one fresh attempt.
+
 ### Test Gemini scenario generation
 
 After copying `backend/.env.example` to `backend/.env`, set `GEMINI_API_KEY` and
