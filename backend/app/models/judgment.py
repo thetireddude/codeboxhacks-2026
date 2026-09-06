@@ -35,7 +35,9 @@ class JudgeHighlightEvent(BaseModel):
     player_id: PlayerSlot
     label: str = Field(min_length=1, max_length=80)
     points: int = Field(ge=0, le=500)
-    transcript_event_ids: list[str] = Field(min_length=1)
+    # Gemini's response schema permits an empty list. The judge service drops
+    # these optional highlights unless it can retain an authoritative ID.
+    transcript_event_ids: list[str]
 
 
 class JudgeResult(BaseModel):

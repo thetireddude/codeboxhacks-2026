@@ -1331,6 +1331,12 @@ names of missing host-side integrations. Gemini judge failures retain the safe
 client message but write the underlying provider error to backend-host logs;
 unexpected scoring failures follow the same visible cleanup path.
 
+Gemini highlight references are optional display metadata. If Gemini cites an
+unknown live transcript ID, the backend retains the validated player scores and
+coaching, removes the unverifiable reference, and omits any highlight with no
+authoritative event remaining; a malformed optional highlight cannot discard a
+completed round's results.
+
 Production scenario preparation requires `GEMINI_API_KEY`: it no longer falls
 back to a hardcoded scene when credentials are absent. Deterministic scenarios
 remain only in automated-test and standalone mock-judging paths.

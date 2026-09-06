@@ -768,6 +768,10 @@ configuration names without exposing values. Gemini and unexpected scoring
 failures are logged on the backend host while both clients receive the safe
 `JUDGING_UNAVAILABLE` state and the match is cleaned up.
 
+Gemini highlight references are optional UI metadata. The backend now removes
+unknown live transcript IDs and drops an unverifiable highlight rather than
+discarding an otherwise valid semantic judgment, scores, and coaching feedback.
+
 ---
 
 ## Milestone I4 — Live Transcript Integration

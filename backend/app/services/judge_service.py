@@ -64,8 +64,7 @@ class JudgeService:
                     },
                 )
                 result = JudgeResult.model_validate(response.parsed)
-                self._validate_event_references(result, judge_input)
-                return result
+                return self._sanitize_highlight_events(result, judge_input)
             except JudgeError:
                 raise
             except Exception as error:
@@ -202,17 +201,38 @@ class JudgeService:
         }
 
     @staticmethod
-    def _validate_event_references(
+    def _sanitize_highlight_events(
         result: JudgeResult, judge_input: JudgeInput
-    ) -> None:
+    ) -> JudgeResult:
+        """Keep valid optional highlights without failing an otherwise usable score.
+
+        Gemini's semantic player scores and coaching do not depend on highlight
+        references. Live transcript IDs are generated UUID-like values, which a
+        model can occasionally copy imperfectly. Rather than failing the entire
+        round, omit only references that cannot be proven to belong to the
+        authoritative transcript and drop a highlight that has none left.
+        """
         known_ids = {event.id for event in judge_input.transcript_events}
+        valid_highlights = []
         for event in result.highlight_events:
-            unknown_ids = set(event.transcript_event_ids) - known_ids
-            if unknown_ids:
-                unknown = ", ".join(sorted(unknown_ids))
-                raise ValueError(
-                    f"Highlight references unknown transcript event(s): {unknown}"
+            event_ids = [
+                event_id
+                for event_id in event.transcript_event_ids
+                if event_id in known_ids
+            ]
+            if not event_ids:
+                logger.warning(
+                    "Dropping Gemini highlight with no authoritative transcript IDs."
                 )
+                continue
+            if len(event_ids) != len(event.transcript_event_ids):
+                logger.warning(
+                    "Removing unknown transcript IDs from a Gemini highlight."
+                )
+            valid_highlights.append(
+                event.model_copy(update={"transcript_event_ids": event_ids})
+            )
+        return result.model_copy(update={"highlight_events": valid_highlights})
 
 
 def create_judge_service(config: Any) -> JudgeService:

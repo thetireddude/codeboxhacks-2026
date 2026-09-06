@@ -112,7 +112,7 @@ def test_retries_when_gemini_returns_an_invalid_result():
     assert len(service._client.models.calls) == 2
 
 
-def test_retries_when_a_highlight_references_an_unknown_event():
+def test_drops_a_highlight_that_references_an_unknown_event_without_failing_score():
     invalid = {
         **VALID_JUDGMENT,
         "highlight_events": [
@@ -122,16 +122,42 @@ def test_retries_when_a_highlight_references_an_unknown_event():
             }
         ],
     }
-    service = _service([invalid, VALID_JUDGMENT], max_attempts=2)
+    service = _service([invalid])
 
     result = service.judge(_judge_input())
 
-    assert result.highlight_events[0].transcript_event_ids == [
-        "speech_003",
-        "switch_001",
-        "speech_004",
-    ]
-    assert len(service._client.models.calls) == 2
+    assert result.player_a.highlight
+    assert result.highlight_events == []
+    assert len(service._client.models.calls) == 1
+
+
+def test_removes_only_unknown_ids_from_a_mixed_highlight_reference():
+    partial = {
+        **VALID_JUDGMENT,
+        "highlight_events": [
+            {
+                **VALID_JUDGMENT["highlight_events"][0],
+                "transcript_event_ids": ["speech_003", "speech_missing"],
+            }
+        ],
+    }
+
+    result = _service([partial]).judge(_judge_input())
+
+    assert result.highlight_events[0].transcript_event_ids == ["speech_003"]
+
+
+def test_drops_a_highlight_with_an_empty_reference_list():
+    empty = {
+        **VALID_JUDGMENT,
+        "highlight_events": [
+            {**VALID_JUDGMENT["highlight_events"][0], "transcript_event_ids": []}
+        ],
+    }
+
+    result = _service([empty]).judge(_judge_input())
+
+    assert result.highlight_events == []
 
 
 def test_reports_a_missing_api_key_without_calling_gemini():
