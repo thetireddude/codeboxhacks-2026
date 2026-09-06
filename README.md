@@ -35,6 +35,19 @@ The API listens on <http://localhost:5000>; `GET /api/health` returns a JSON
 health response. No Redis, LiveKit, Gemini, or speech-to-text service is contacted
 in Milestone 0.
 
+### Test Gemini scenario generation
+
+After copying `backend/.env.example` to `backend/.env`, set `GEMINI_API_KEY` and
+run this from `backend/`:
+
+```powershell
+python generate_scenario.py
+```
+
+The command prints one validated scenario as formatted JSON. It makes one live
+Gemini request and may retry once if Gemini returns an invalid response or a
+temporary error.
+
 ### Contract validation
 
 From the repository root, after installing the backend requirements:
