@@ -64,6 +64,22 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
   const isInRound = connectionState === "countdown" || connectionState === "active";
   const ownRole = scenario?.[localPlayer === "A" ? "player_a_role" : "player_b_role"];
 
+  // The broadcaster reaches both clients, while the acknowledgement provides
+  // an immediate fallback for the person who pressed Switch. Keep the visual
+  // derived from the authoritative target rather than the local actor.
+  const showSwitchImpact = useCallback((event) => {
+    const targetPlayer = event?.target_player_id;
+    if (!targetPlayer) return;
+    window.clearTimeout(switchFeedbackTimerRef.current);
+    setSwitchFeedback({ eventId: event.id, targetPlayer });
+    switchFeedbackTimerRef.current = window.setTimeout(() => setSwitchFeedback(null), 1200);
+    if (targetPlayer === localPlayer) {
+      setPartialTranscript("");
+      setTranscriptionStatus("Switch received — starting your replacement response…");
+      setCaptureCycle((current) => current + 1);
+    }
+  }, [localPlayer]);
+
   const detachMedia = () => {
     const room = roomRef.current;
     roomRef.current = null;
@@ -106,16 +122,7 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
       if (payload.match_id !== match.match_id) return;
       setSwitchesRemaining(payload.switches_remaining);
       setIsSwitching(false);
-      const targetPlayer = payload.event?.target_player_id;
-      if (!targetPlayer) return;
-      window.clearTimeout(switchFeedbackTimerRef.current);
-      setSwitchFeedback({ eventId: payload.event.id, targetPlayer });
-      switchFeedbackTimerRef.current = window.setTimeout(() => setSwitchFeedback(null), 1200);
-      if (payload.event?.target_player_id === localPlayer) {
-        setPartialTranscript("");
-        setTranscriptionStatus("Switch received — starting your replacement response…");
-        setCaptureCycle((current) => current + 1);
-      }
+      showSwitchImpact(payload.event);
     };
     const onSwitchRejected = (payload) => {
       if (payload.match_id !== match.match_id) return;
@@ -180,7 +187,7 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
       socket.off("connect", onReconnect);
       detachMedia();
     };
-  }, [guestId, localPlayer, match.match_id, socket]);
+  }, [guestId, localPlayer, match.match_id, showSwitchImpact, socket]);
 
   useEffect(() => {
     if (connectionState !== "active" || round?.active_player_id !== localPlayer || captureRef.current) return undefined;
@@ -349,11 +356,15 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
       guest_id: guestId,
       request_id: crypto.randomUUID(),
     }, (response) => {
-      if (response?.ok) return;
+      if (response?.ok) {
+        setSwitchesRemaining(response.switches_remaining ?? { A: 0, B: 0 });
+        showSwitchImpact(response.event);
+        return;
+      }
       setIsSwitching(false);
       setErrorMessage(response?.code ? `Switch unavailable: ${response.code}` : "Switch was rejected.");
     });
-  }, [canPressSwitch, guestId, match.match_id, socket]);
+  }, [canPressSwitch, guestId, match.match_id, showSwitchImpact, socket]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {

@@ -382,6 +382,7 @@ def test_listener_switches_are_broadcast_repeatable_and_idempotent():
     assert first_switch["event"]["target_player_id"] == "A"
     assert first_switch["switches_remaining"] == {"A": 5, "B": 4}
     assert _wait_for(first_client, "switch:triggered")["event"] == first_switch["event"]
+    assert _wait_for(second_client, "switch:triggered")["event"] == first_switch["event"]
 
     replay = second_client.emit(
         "switch:press",
