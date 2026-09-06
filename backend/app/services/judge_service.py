@@ -59,10 +59,18 @@ class JudgeService:
                     config={
                         "response_mime_type": "application/json",
                         "response_schema": self._response_schema(),
-                        "max_output_tokens": 400,
+                        # Live transcript IDs are UUID-length. The former 400
+                        # token cap could truncate otherwise valid structured
+                        # output that succeeded with the short fixture IDs.
+                        "max_output_tokens": 2_048,
                         "temperature": 0.2,
                     },
                 )
+                if response.parsed is None:
+                    raise ValueError(
+                        "Gemini returned no parsed judgment"
+                        f" (finish_reason={self._finish_reason(response)})."
+                    )
                 result = JudgeResult.model_validate(response.parsed)
                 return self._sanitize_highlight_events(result, judge_input)
             except JudgeError:
@@ -100,6 +108,15 @@ class JudgeService:
                 },
             )
         return self._client
+
+    @staticmethod
+    def _finish_reason(response: Any) -> str:
+        """Return provider completion metadata without logging response content."""
+        candidates = getattr(response, "candidates", None) or []
+        if not candidates:
+            return "unknown"
+        reason = getattr(candidates[0], "finish_reason", None)
+        return str(reason or "unknown")
 
     @staticmethod
     def _build_prompt(judge_input: JudgeInput) -> str:
@@ -177,6 +194,7 @@ class JudgeService:
                 "player_b": player,
                 "highlight_events": {
                     "type": "ARRAY",
+                    "maxItems": 4,
                     "items": {
                         "type": "OBJECT",
                         "properties": {

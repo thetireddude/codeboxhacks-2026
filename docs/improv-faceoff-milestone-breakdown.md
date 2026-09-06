@@ -774,6 +774,10 @@ discarding an otherwise valid semantic judgment, scores, and coaching feedback.
 The judge retries once only after a failed or invalid structured Gemini response;
 successful live rounds still make a single request.
 
+The structured response budget is 2,048 tokens with at most four highlights,
+so UUID-length live event references cannot exhaust the fixture-sized output
+budget. Unparsed responses log only their provider finish reason for diagnosis.
+
 If Gemini remains unavailable, the live match still reaches `results:ready`
 using only deterministic Speed scoring and an explicit unavailable-feedback
 notice. This prevents a provider outage from interrupting a completed match.

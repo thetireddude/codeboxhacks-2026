@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from uuid import UUID
 
 from app.models import MatchResults, MatchState
@@ -16,6 +17,9 @@ from .game_service import GameService
 from .judge_service import JudgeError, JudgeService
 from .scenario_service import ScenarioService
 from .scoring_service import ScoringService
+
+
+logger = logging.getLogger(__name__)
 
 
 class MatchIntegrationService:
@@ -54,6 +58,11 @@ class MatchIntegrationService:
             # A completed match should still reach results if Gemini is down.
             # Preserve objective Speed scoring while avoiding invented semantic
             # points or coaching that pretends Gemini completed a review.
+            logger.exception(
+                "Using deterministic judging fallback for match %s; events=%s",
+                match_id,
+                self._safe_event_summary(match.transcript_events),
+            )
             judgment = self._unavailable_judgment()
         results = self._scoring_service.score(
             ScoringInput(
@@ -79,3 +88,25 @@ class MatchIntegrationService:
             improvement="Start a new match to receive Gemini coaching.",
         )
         return JudgeResult(player_a=player, player_b=player)
+
+    @staticmethod
+    def _safe_event_summary(events) -> list[dict]:
+        """Describe live judge input without transcript text or credentials."""
+        return [
+            {
+                "id": event.id,
+                "type": event.type,
+                "player_id": getattr(event, "player_id", None),
+                "accepted": getattr(event, "accepted", None),
+                "truncated_by_switch": getattr(
+                    event, "truncated_by_switch", None
+                ),
+                "truncated_by_round_end": getattr(
+                    event, "truncated_by_round_end", None
+                ),
+                "start_ms": getattr(event, "start_ms", None),
+                "end_ms": getattr(event, "end_ms", None),
+                "timestamp_ms": getattr(event, "timestamp_ms", None),
+            }
+            for event in events
+        ]

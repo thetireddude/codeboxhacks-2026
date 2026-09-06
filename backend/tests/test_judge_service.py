@@ -52,6 +52,8 @@ class FakeModels:
         outcome = self.outcomes.pop(0)
         if isinstance(outcome, Exception):
             raise outcome
+        if hasattr(outcome, "parsed"):
+            return outcome
         return SimpleNamespace(parsed=outcome)
 
 
@@ -96,7 +98,10 @@ def test_judges_fixture_transcript_with_structured_output():
     call = service._client.models.calls[0]
     assert call["model"] == "gemini-3.1-flash-lite"
     assert call["config"]["response_mime_type"] == "application/json"
-    assert call["config"]["max_output_tokens"] == 400
+    assert call["config"]["max_output_tokens"] == 2_048
+    assert call["config"]["response_schema"]["properties"]["highlight_events"][
+        "maxItems"
+    ] == 4
     assert call["config"]["temperature"] == 0.2
     assert "rejected_speech" in call["contents"]
     assert "switch_response_latencies_ms" in call["contents"]
@@ -110,6 +115,19 @@ def test_retries_when_gemini_returns_an_invalid_result():
 
     assert result.player_b.highlight
     assert len(service._client.models.calls) == 2
+
+
+def test_reports_safe_finish_reason_when_structured_output_is_not_parsed(caplog):
+    response = SimpleNamespace(
+        parsed=None,
+        candidates=[SimpleNamespace(finish_reason="MAX_TOKENS")],
+    )
+    service = _service([response])
+
+    with pytest.raises(JudgeError):
+        service.judge(_judge_input())
+
+    assert "finish_reason=MAX_TOKENS" in caplog.text
 
 
 def test_drops_a_highlight_that_references_an_unknown_event_without_failing_score():

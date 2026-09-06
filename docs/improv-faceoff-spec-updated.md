@@ -1342,10 +1342,24 @@ Gemini request fails or produces an invalid structured result. Successful
 rounds remain one request; this is separate from, and replaces, opaque SDK
 retry behavior.
 
+The structured judgment reserves 2,048 output tokens and permits at most four
+highlight events. This accommodates UUID-length live transcript references and
+prevents the shorter A5 fixture from masking production output truncation. A
+missing parsed response logs its safe Gemini finish reason without response text.
+When fallback is used, the backend also logs the match ID and transcript event
+IDs, types, timing, acceptance, and truncation flags without dialogue text.
+
 If both Gemini attempts fail, the completed match still emits `results:ready`.
 The fallback preserves deterministic A6 Speed points but assigns zero semantic
 points and clearly labels Gemini coaching as unavailable; it never fabricates
 AI feedback or leaves players stranded on a judging screen.
+
+The production backend ships as the repository-root Docker image using one
+threaded Gunicorn worker. Hosting must provide persistent Redis and the backend
+environment variables; `.env` files and logs are excluded from the image.
+`scripts/check_deployment.py` gates a deployment on health, integration
+configuration, and a WebSocket-only Socket.IO handshake so HTTP polling cannot
+silently mask a broken upgrade path.
 
 Production scenario preparation requires `GEMINI_API_KEY`: it no longer falls
 back to a hardcoded scene when credentials are absent. Deterministic scenarios

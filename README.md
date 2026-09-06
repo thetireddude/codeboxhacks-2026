@@ -66,6 +66,23 @@ browser console.
 `GEMINI_JUDGE_MAX_ATTEMPTS` defaults to `2`: a successful judgment uses one
 request, while a malformed or transient Gemini response gets one fresh attempt.
 
+The repository-root `Dockerfile` is the production backend image. Build it from
+the repository root, configure the variables from `backend/.env.example` in the
+hosting platform, attach a persistent Redis service, and expose the platform's
+`PORT`. Gunicorn intentionally uses one threaded worker because Socket.IO
+connections are process-local while Redis owns shared match state.
+
+After deployment, require a real WebSocket upgrade—not a polling fallback:
+
+```powershell
+cd backend
+python scripts/check_deployment.py https://api.example.com
+```
+
+The probe checks `/api/health`, `/api/ready`, and a WebSocket-only Socket.IO
+handshake. Threaded Gunicorn plus the explicitly installed `simple-websocket`
+package provides WebSocket support; eventlet is not required.
+
 ### Test Gemini scenario generation
 
 After copying `backend/.env.example` to `backend/.env`, set `GEMINI_API_KEY` and

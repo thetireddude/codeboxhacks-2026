@@ -47,7 +47,9 @@ class JudgeResult(BaseModel):
 
     player_a: JudgedPlayer
     player_b: JudgedPlayer
-    highlight_events: list[JudgeHighlightEvent] = Field(default_factory=list)
+    highlight_events: list[JudgeHighlightEvent] = Field(
+        default_factory=list, max_length=4
+    )
 
 
 class JudgeInput(BaseModel):
