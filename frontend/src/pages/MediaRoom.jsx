@@ -39,6 +39,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
   const remoteAudioRef = useRef(null);
   const roomRef = useRef(null);
   const captureRef = useRef(null);
+  const switchFeedbackTimerRef = useRef(null);
   const [connectionState, setConnectionState] = useState("setup");
   const [errorMessage, setErrorMessage] = useState("");
   const [devices, setDevices] = useState({ camera: false, microphone: false });
@@ -54,6 +55,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
   const [switchesRemaining, setSwitchesRemaining] = useState({ A: 0, B: 0 });
   const [captureCycle, setCaptureCycle] = useState(0);
   const [isSwitching, setIsSwitching] = useState(false);
+  const [showSwitchFeedback, setShowSwitchFeedback] = useState(false);
   const [results, setResults] = useState(null);
 
   const localPlayer = match.player_id;
@@ -108,6 +110,12 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
         setPartialTranscript("");
         setTranscriptionStatus("Switch received — starting your replacement response…");
         setCaptureCycle((current) => current + 1);
+        window.clearTimeout(switchFeedbackTimerRef.current);
+        setShowSwitchFeedback(false);
+        window.requestAnimationFrame(() => {
+          setShowSwitchFeedback(true);
+          switchFeedbackTimerRef.current = window.setTimeout(() => setShowSwitchFeedback(false), 1200);
+        });
       }
     };
     const onSwitchRejected = (payload) => {
@@ -168,6 +176,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       socket.off("switch:rejected", onSwitchRejected);
       captureRef.current?.stop();
       captureRef.current = null;
+      window.clearTimeout(switchFeedbackTimerRef.current);
       socket.off("disconnect", onDisconnect);
       socket.off("connect", onReconnect);
       detachMedia();
@@ -340,9 +349,10 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
           )}
 
           <div className={`video-grid ${isInRound ? "game-video-grid" : ""}`}>
-            <article className={`video-tile video-tile--local ${round?.active_player_id === localPlayer ? "video-tile--active" : ""}`}>
+            <article className={`video-tile video-tile--local ${round?.active_player_id === localPlayer ? "video-tile--active" : ""} ${showSwitchFeedback ? "video-tile--switched" : ""}`}>
               <video ref={localVideoRef} autoPlay muted playsInline className={hasLocalVideo ? "" : "video-tile__hidden"} />
               {!hasLocalVideo && <div className="video-placeholder"><b>YOU</b><span>{connectionState === "connecting" ? "CONNECTING CAMERA…" : "CAMERA PREVIEW"}</span></div>}
+              {showSwitchFeedback && <div className="switch-feedback" role="status" aria-live="assertive"><b>SWITCHED!</b></div>}
               <div className="video-tile__label"><span>YOU · PLAYER {localPlayer}</span><b>{devices.microphone ? "● MIC ON" : "○ MIC OFF"}</b></div>
             </article>
             <article className={`video-tile video-tile--remote ${round?.active_player_id === opponentPlayer ? "video-tile--active" : ""}`}>
