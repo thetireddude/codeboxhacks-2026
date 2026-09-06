@@ -56,6 +56,12 @@ export function playSwitchSfx() {
   tone(95, 0.24, "square", 0.06, 0.07);
 }
 
+export function playSpeedBonusSfx() {
+  tone(880, 0.07, "square", 0.065);
+  tone(1175, 0.09, "square", 0.06, 0.065);
+  tone(1568, 0.13, "square", 0.05, 0.14);
+}
+
 export function playCountdownSfx() {
   tone(660, 0.07, "square", 0.055);
 }

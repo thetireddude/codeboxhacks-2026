@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Room, RoomEvent, Track } from "livekit-client";
 import { startPcm16Capture } from "../services/pcm16Capture.js";
-import { playCountdownSfx, playRoundEndSfx, playSwitchSfx, playTurnChangeSfx, startBackgroundMusic, stopBackgroundMusic } from "../services/arcadeSfx.js";
+import { playCountdownSfx, playRoundEndSfx, playSpeedBonusSfx, playSwitchSfx, playTurnChangeSfx, startBackgroundMusic, stopBackgroundMusic } from "../services/arcadeSfx.js";
 
 function requestCredentials(socket, matchId) {
   return new Promise((resolve, reject) => {
@@ -41,6 +41,8 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
   const roomRef = useRef(null);
   const captureRef = useRef(null);
   const switchFeedbackTimerRef = useRef(null);
+  const speedBonusTimerRef = useRef(null);
+  const pendingLocalSwitchRef = useRef(null);
   const handledSwitchEventIdsRef = useRef(new Set());
   const [connectionState, setConnectionState] = useState("setup");
   const [errorMessage, setErrorMessage] = useState("");
@@ -59,6 +61,7 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
   const [isSwitching, setIsSwitching] = useState(false);
   const [isLeavingResults, setIsLeavingResults] = useState(false);
   const [switchFeedback, setSwitchFeedback] = useState(null);
+  const [speedBonus, setSpeedBonus] = useState(null);
   const [results, setResults] = useState(null);
 
   const localPlayer = match.player_id;
@@ -83,6 +86,8 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
     setSwitchFeedback({ eventId: event.id, targetPlayer: event.target_player_id });
     switchFeedbackTimerRef.current = window.setTimeout(() => setSwitchFeedback(null), 1800);
     if (event.target_player_id === localPlayer) {
+      // Visual-only estimate. The backend remains authoritative at round end.
+      pendingLocalSwitchRef.current = { eventId: event.id, receivedAt: performance.now() };
       setPartialSpeech(null);
       setTranscriptionStatus("Switch received — starting your replacement response…");
       setCaptureCycle((current) => current + 1);
@@ -147,6 +152,16 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
     };
     const onPartial = (payload) => {
       if (payload.match_id !== match.match_id || !payload.speech_id || !payload.player_id) return;
+      const pendingSwitch = pendingLocalSwitchRef.current;
+      if (payload.player_id === localPlayer && payload.text?.trim() && pendingSwitch) {
+        const latencyMs = Math.max(0, Math.round(performance.now() - pendingSwitch.receivedAt));
+        const points = Math.max(0, 500 - Math.floor((120 * latencyMs) / 1000));
+        pendingLocalSwitchRef.current = null;
+        window.clearTimeout(speedBonusTimerRef.current);
+        setSpeedBonus({ eventId: pendingSwitch.eventId, points, latencyMs });
+        playSpeedBonusSfx();
+        speedBonusTimerRef.current = window.setTimeout(() => setSpeedBonus(null), 1800);
+      }
       setPartialSpeech({
         speechId: payload.speech_id,
         playerId: payload.player_id,
@@ -206,6 +221,8 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
       captureRef.current = null;
       stopBackgroundMusic();
       window.clearTimeout(switchFeedbackTimerRef.current);
+      window.clearTimeout(speedBonusTimerRef.current);
+      pendingLocalSwitchRef.current = null;
       socket.off("disconnect", onDisconnect);
       socket.off("connect", onReconnect);
       detachMedia();
@@ -490,6 +507,7 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
             </article>
             {connectionState === "countdown" && <div className="countdown-overlay" aria-live="assertive"><span>ROUND 1</span><b>{countdown || "GO!"}</b><small>THE SCENE STARTS NOW</small></div>}
           </div>
+          {speedBonus && <div key={speedBonus.eventId} className="speed-bonus-popup" role="status" aria-live="polite"><b>FAST RECOVERY!</b><strong>+{speedBonus.points} SPEED</strong><small>{(speedBonus.latencyMs / 1000).toFixed(2)}s · ESTIMATED</small></div>}
           <audio ref={remoteAudioRef} autoPlay />
 
           {isInRound && <section className="round-log" aria-label="Live scene transcript">
