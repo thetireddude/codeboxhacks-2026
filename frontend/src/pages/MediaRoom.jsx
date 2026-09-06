@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Room, RoomEvent, Track } from "livekit-client";
 import { startPcm16Capture } from "../services/pcm16Capture.js";
-import { playSwitchSfx } from "../services/arcadeSfx.js";
+import { playCountdownSfx, playRoundEndSfx, playSwitchSfx, playTurnChangeSfx, startBackgroundMusic, stopBackgroundMusic } from "../services/arcadeSfx.js";
 
 function requestCredentials(socket, matchId) {
   return new Promise((resolve, reject) => {
@@ -103,6 +103,7 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
       setScenario(payload.scenario ?? null);
       setConnectionState("countdown");
       setCountdown(Math.max(0, Math.ceil((Date.parse(payload.starts_at) - Date.now()) / 1000)));
+      startBackgroundMusic();
     };
     const onStart = (payload) => {
       if (payload.match_id !== match.match_id) return;
@@ -115,6 +116,7 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
     const onTurnChanged = (payload) => {
       if (payload.match_id !== match.match_id) return;
       setRound((current) => current ? { ...current, active_player_id: payload.active_player_id } : current);
+      playTurnChangeSfx();
     };
     const onTranscriptEvent = (payload) => {
       if (payload.match_id !== match.match_id) return;
@@ -154,6 +156,8 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
       if (payload.match_id !== match.match_id) return;
       setRound((current) => current ? { ...current, ended: true } : current);
       setConnectionState("ended");
+      playRoundEndSfx();
+      stopBackgroundMusic();
     };
     const onResultsReady = (payload) => {
       if (payload.match_id !== match.match_id) return;
@@ -199,6 +203,7 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
       socket.off("switch:rejected", onSwitchRejected);
       captureRef.current?.stop();
       captureRef.current = null;
+      stopBackgroundMusic();
       window.clearTimeout(switchFeedbackTimerRef.current);
       socket.off("disconnect", onDisconnect);
       socket.off("connect", onReconnect);
@@ -252,6 +257,7 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
 
   useEffect(() => {
     if (connectionState !== "countdown" || countdown === null || countdown <= 0) return undefined;
+    playCountdownSfx();
     const timer = window.setTimeout(() => setCountdown((value) => Math.max(0, value - 1)), 1000);
     return () => window.clearTimeout(timer);
   }, [connectionState, countdown]);

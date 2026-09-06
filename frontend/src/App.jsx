@@ -30,9 +30,10 @@ export default function App() {
         <Route path="*" element={<HomePage />} />
       </Routes>
       <label className="sfx-volume-control">
-        <span aria-hidden="true">{sfxVolume === 0 ? "×" : "◖"}</span>
+        <span className="sfx-volume-control__icon" aria-hidden="true">{sfxVolume === 0 ? "×" : "◖"}</span>
+        <span className="sfx-volume-control__label">VOLUME</span>
         <input aria-label="Sound effects volume" type="range" min="0" max="1" step="0.05" value={sfxVolume} onChange={updateSfxVolume} />
-        <b>{Math.round(sfxVolume * 100)}</b>
+        <b aria-live="polite">{Math.round(sfxVolume * 100)}%</b>
       </label>
     </>
   );
