@@ -9,7 +9,7 @@ from app.models.judgment import JudgeInput
 from app.models.scoring import ScoringInput
 from .game_service import GameService
 from .judge_service import JudgeService
-from .scenario_service import MockScenarioService, ScenarioService
+from .scenario_service import ScenarioService
 from .scoring_service import ScoringService
 
 
@@ -17,7 +17,7 @@ class MatchIntegrationService:
     def __init__(
         self,
         game_service: GameService,
-        scenario_service: ScenarioService | MockScenarioService,
+        scenario_service: ScenarioService,
         judge_service: JudgeService,
         scoring_service: ScoringService,
     ) -> None:

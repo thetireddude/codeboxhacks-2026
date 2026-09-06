@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useRef, useState } from "react";
 import { Room, RoomEvent, Track } from "livekit-client";
+import { startPcm16Capture } from "../services/pcm16Capture.js";
 
 function requestCredentials(socket, matchId) {
   return new Promise((resolve, reject) => {
@@ -37,6 +38,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
   const remoteVideoRef = useRef(null);
   const remoteAudioRef = useRef(null);
   const roomRef = useRef(null);
+  const captureRef = useRef(null);
   const [connectionState, setConnectionState] = useState("setup");
   const [errorMessage, setErrorMessage] = useState("");
   const [devices, setDevices] = useState({ camera: false, microphone: false });
@@ -46,6 +48,9 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
   const [round, setRound] = useState(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [scenario, setScenario] = useState(null);
+  const [transcript, setTranscript] = useState([]);
+  const [partialTranscript, setPartialTranscript] = useState("");
+  const [transcriptionStatus, setTranscriptionStatus] = useState("Waiting for the round to start.");
 
   const localPlayer = match.player_id;
   const opponentPlayer = localPlayer === "A" ? "B" : "A";
@@ -76,6 +81,18 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       setConnectionState("active");
       setCountdown(null);
     };
+    const onTurnChanged = (payload) => {
+      if (payload.match_id !== match.match_id) return;
+      setRound((current) => current ? { ...current, active_player_id: payload.active_player_id } : current);
+    };
+    const onTranscriptEvent = (payload) => {
+      if (payload.match_id !== match.match_id || payload.event?.type !== "speech") return;
+      setTranscript((current) => current.some((line) => line.id === payload.event.id) ? current : [...current, payload.event]);
+      setPartialTranscript("");
+    };
+    const onPartial = (payload) => {
+      if (payload.player_id === localPlayer) setPartialTranscript(payload.text ?? "");
+    };
     const onEnd = (payload) => {
       if (payload.match_id !== match.match_id) return;
       setRound((current) => current ? { ...current, ended: true } : current);
@@ -86,15 +103,41 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
     socket.on("round:prepare", onPrepare);
     socket.on("round:start", onStart);
     socket.on("round:end", onEnd);
+    socket.on("turn:changed", onTurnChanged);
+    socket.on("transcript:event", onTranscriptEvent);
+    socket.on("speech:partial", onPartial);
     socket.on("disconnect", onDisconnect);
     return () => {
       socket.off("round:prepare", onPrepare);
       socket.off("round:start", onStart);
       socket.off("round:end", onEnd);
+      socket.off("turn:changed", onTurnChanged);
+      socket.off("transcript:event", onTranscriptEvent);
+      socket.off("speech:partial", onPartial);
+      captureRef.current?.stop();
+      captureRef.current = null;
       socket.off("disconnect", onDisconnect);
       detachMedia();
     };
-  }, [match.match_id, socket]);
+  }, [localPlayer, match.match_id, socket]);
+
+  useEffect(() => {
+    if (connectionState !== "active" || round?.active_player_id !== localPlayer || captureRef.current) return undefined;
+    let cancelled = false;
+    setTranscriptionStatus("Your turn — connecting live transcript…");
+    startPcm16Capture({ socket, playerId: localPlayer, matchId: match.match_id, guestId, onError: setErrorMessage })
+      .then((capture) => {
+        if (cancelled) { capture.stop(); return; }
+        captureRef.current = capture;
+        setTranscriptionStatus("Your microphone is sending live transcript audio.");
+      })
+      .catch((captureError) => { if (!cancelled) setErrorMessage(captureError.message); });
+    return () => {
+      cancelled = true;
+      captureRef.current?.stop();
+      captureRef.current = null;
+    };
+  }, [connectionState, guestId, localPlayer, match.match_id, round?.active_player_id, socket]);
 
   useEffect(() => {
     if (connectionState !== "countdown" || countdown === null || countdown <= 0) return undefined;
@@ -229,11 +272,21 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
           </div>
           <audio ref={remoteAudioRef} autoPlay />
 
+          {isInRound && <section className="round-log" aria-label="Live scene transcript">
+            <header><span>LIVE SCENE TRANSCRIPT</span><b>{round?.active_player_id === localPlayer ? "YOUR TURN" : `PLAYER ${round?.active_player_id ?? "?"} SPEAKING`}</b></header>
+            <div className="round-log__entries">
+              {transcript.length === 0 && !partialTranscript && <p className="round-log__entry round-log__entry--round">LISTENING FOR THE FIRST LINE…</p>}
+              {transcript.map((line) => <p key={line.id} className="round-log__entry"><strong>PLAYER {line.player_id}:</strong> {line.text}</p>)}
+              {partialTranscript && <p className="round-log__entry round-log__entry--active"><strong>PLAYER {localPlayer}:</strong> {partialTranscript}</p>}
+            </div>
+          </section>}
+
           {connectionState === "setup" && <div className="media-setup-actions"><button className="match-button media-permission-button" type="button" onClick={connectMedia}><span className="match-button__people">◉</span><span><strong>ENABLE CAMERA + MIC</strong><small>JOIN SECURE MEDIA ROOM</small></span></button></div>}
           {connectionState === "connecting" && <p className="media-connection" role="status"><i />CONNECTING SECURE MEDIA…</p>}
           {["waiting", "countdown", "active", "ended"].includes(connectionState) && <div className="media-controls" aria-label="Media controls"><button type="button" className={devices.microphone ? "media-control media-control--active" : "media-control"} onClick={() => toggleDevice("microphone")}>{devices.microphone ? "◉" : "○"}<span>{devices.microphone ? "MUTE" : "UNMUTE"}</span></button><button type="button" className={devices.camera ? "media-control media-control--active" : "media-control"} onClick={() => toggleDevice("camera")}>{devices.camera ? "◉" : "○"}<span>{devices.camera ? "CAMERA ON" : "CAMERA OFF"}</span></button></div>}
           {errorMessage && <p className="media-error" role="alert">{errorMessage}</p>}
           <p className="media-connection" role="status"><i />{connectionMessage(connectionState)}</p>
+          {connectionState === "active" && <p className="media-connection"><i />{transcriptionStatus}</p>}
         </div>
       </section>
     </main>

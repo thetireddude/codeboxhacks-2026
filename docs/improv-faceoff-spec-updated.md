@@ -1294,10 +1294,20 @@ releases a disconnected guest's socket and old match index so that guest can
 return to the public queue.
 
 This does not complete the overall game loop: scenario display (Milestone 4 /
-I3), live transcript and turn/Switch wiring (Milestone 5 / I4-I5), and real
-score/result presentation (Milestone 6 / I6) remain separate integration work.
-Active-match reconnect/resume and permanent HTTPS hosting are also not yet
-implemented.
+I3) and live transcript rendering (Milestone 5 / I4) are now implemented on
+the frontend and await the existing two-browser remote validation. The
+remaining separate work is turn/Switch UX (I5), real score/result presentation
+(I6), active-match reconnect/resume, and permanent HTTPS hosting.
+
+The I3 screen renders the backend-authoritative `round:prepare` scenario,
+tone, and player-specific role for both clients. The I4 screen opens a
+match-bound PCM16 stream for the active local player, displays that player's
+partial speech, and renders finalized authoritative transcript events for both
+participants.
+
+Production scenario preparation requires `GEMINI_API_KEY`: it no longer falls
+back to a hardcoded scene when credentials are absent. Deterministic scenarios
+remain only in automated-test and standalone mock-judging paths.
 
 ---
 

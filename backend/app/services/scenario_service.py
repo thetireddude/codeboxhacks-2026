@@ -125,8 +125,8 @@ class ScenarioService:
 
 
 def create_scenario_service(config: Any) -> ScenarioService | MockScenarioService:
-    """Build the configured A1 scenario service at the application boundary."""
-    if config.get("TESTING") or not config["GEMINI_API_KEY"]:
+    """Build Gemini generation in production and deterministic generation in tests."""
+    if config.get("TESTING"):
         return MockScenarioService()
     return ScenarioService(
         api_key=config["GEMINI_API_KEY"],
