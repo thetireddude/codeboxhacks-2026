@@ -96,8 +96,10 @@ def test_ready_countdown_turns_and_authoritative_round_end():
     ) == {"ok": True, "state": "COUNTDOWN"}
 
     prepare = _wait_for(first_client, "round:prepare")
+    opponent_prepare = _wait_for(second_client, "round:prepare")
     assert prepare["match_id"] == match_id
     assert prepare["scenario"]["tone"] == "wacky"
+    assert opponent_prepare["scenario"] == prepare["scenario"]
     started = _wait_for(first_client, "round:start")
     assert started["active_player_id"] == "A"
     assert started["duration_ms"] == FastRoundConfig.ROUND_DURATION_MS
