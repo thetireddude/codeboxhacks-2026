@@ -49,11 +49,15 @@ def register_matchmaking_handlers(
             _emit_match_found(service, match)
             return {"ok": True, "status": status, "match_id": str(match.match_id)}
         except (MatchmakingError, ValueError) as error:
-            _emit_error("INVALID_PAYLOAD", str(error))
-            return {"ok": False}
+            error_payload = match_error_payload("INVALID_PAYLOAD", str(error))
+            _emit_error(**error_payload)
+            return {"ok": False, "error": error_payload}
         except StorageUnavailableError:
-            _emit_error("STORAGE_UNAVAILABLE", "Matchmaking is temporarily unavailable")
-            return {"ok": False}
+            error_payload = match_error_payload(
+                "STORAGE_UNAVAILABLE", "Matchmaking is temporarily unavailable"
+            )
+            _emit_error(**error_payload)
+            return {"ok": False, "error": error_payload}
 
     @socketio.on("queue:leave")
     def leave_queue(payload: dict | None) -> dict:
@@ -67,17 +71,15 @@ def register_matchmaking_handlers(
             _emit_error("STORAGE_UNAVAILABLE", "Matchmaking is temporarily unavailable")
             return {"ok": False}
 
-    @socketio.on("match:cancel")
-    def cancel_match(payload: dict | None) -> dict:
-        """Cancel a just-found match and release both players immediately."""
+    @socketio.on("match:leave")
+    def leave_completed_match(payload: dict | None) -> dict:
         try:
+            if not isinstance(payload, dict):
+                raise ValueError("payload must be an object")
             guest_id = _required_uuid(payload)
-            match_id = UUID(str((payload or {})["match_id"]))
-            match = service.cancel_unstarted_match(guest_id, request.sid, match_id)
-            if match is None:
-                return {"ok": True, "cancelled": False}
-            _emit_match_cancelled(service, match)
-            return {"ok": True, "cancelled": True}
+            match_id = UUID(str(payload["match_id"]))
+            service.leave_completed_match(guest_id, request.sid, match_id)
+            return {"ok": True}
         except (KeyError, MatchmakingError, ValueError) as error:
             _emit_error("INVALID_PAYLOAD", str(error))
             return {"ok": False}

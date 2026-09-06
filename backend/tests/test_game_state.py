@@ -3,7 +3,7 @@ from uuid import UUID
 
 from app import create_app, socketio
 from app.config import AppConfig
-from app.models import MatchStatus
+from app.models import GuestStatus, MatchStatus
 from app.services.judge_service import JudgeError
 
 
@@ -20,6 +20,15 @@ class SwitchRoundConfig(FastRoundConfig):
 
 class CleanupRoundConfig(FastRoundConfig):
     MATCH_CLEANUP_DELAY_MS = 10
+
+
+class RequeueCleanupRoundConfig(FastRoundConfig):
+    MATCH_CLEANUP_DELAY_MS = 100
+
+
+class ResultDisconnectGraceConfig(FastRoundConfig):
+    MATCH_CLEANUP_DELAY_MS = 10_000
+    RESULT_DISCONNECT_GRACE_MS = 10
 
 
 def _new_guest(client):
@@ -191,6 +200,124 @@ def test_reconnecting_player_receives_the_retained_final_results():
     assert _wait_for(reconnecting_client, "results:ready") == original_results
 
 
+def test_both_disconnected_players_are_released_after_result_grace_period():
+    app, first_client, second_client, first_guest, second_guest, _match_id = (
+        _paired_clients(ResultDisconnectGraceConfig)
+    )
+    first_client.emit(
+        "player:ready",
+        {"match_id": _match_id, "guest_id": first_guest["guest_id"]},
+        callback=True,
+    )
+    second_client.emit(
+        "player:ready",
+        {"match_id": _match_id, "guest_id": second_guest["guest_id"]},
+        callback=True,
+    )
+    _wait_for(first_client, "results:ready")
+    _wait_for(second_client, "results:ready")
+
+    first_client.disconnect()
+    second_client.disconnect()
+
+    deadline = time.monotonic() + 1
+    service = app.extensions["matchmaking_service"]
+    while time.monotonic() < deadline:
+        if service.get_match_for_guest(UUID(first_guest["guest_id"])) is None:
+            break
+        time.sleep(0.01)
+    else:
+        raise AssertionError("Abandoned retained result was not released")
+
+    first_reconnect = socketio.test_client(app)
+    second_reconnect = socketio.test_client(app)
+    assert first_reconnect.emit(
+        "guest:create", {"guest_id": first_guest["guest_id"]}, callback=True
+    )["ok"] is True
+    assert second_reconnect.emit(
+        "guest:create", {"guest_id": second_guest["guest_id"]}, callback=True
+    )["ok"] is True
+    assert first_reconnect.emit(
+        "queue:join", {"guest_id": first_guest["guest_id"]}, callback=True
+    ) == {"ok": True, "status": "waiting"}
+    assert second_reconnect.emit(
+        "queue:join", {"guest_id": second_guest["guest_id"]}, callback=True
+    )["status"] == "paired"
+
+
+def test_player_can_leave_results_and_requeue_without_releasing_opponent_results():
+    app, first_client, second_client, first_guest, second_guest, match_id = (
+        _paired_clients()
+    )
+    first_client.emit(
+        "player:ready",
+        {"match_id": match_id, "guest_id": first_guest["guest_id"]},
+        callback=True,
+    )
+    second_client.emit(
+        "player:ready",
+        {"match_id": match_id, "guest_id": second_guest["guest_id"]},
+        callback=True,
+    )
+    _wait_for(first_client, "results:ready")
+    _wait_for(second_client, "results:ready")
+
+    assert first_client.emit(
+        "match:leave",
+        {"match_id": match_id, "guest_id": first_guest["guest_id"]},
+        callback=True,
+    ) == {"ok": True}
+
+    service = app.extensions["matchmaking_service"]
+    assert service.get_match_for_guest(UUID(first_guest["guest_id"])) is None
+    assert service.get_match_for_guest(UUID(second_guest["guest_id"])) is not None
+    assert first_client.emit(
+        "queue:join", {"guest_id": first_guest["guest_id"]}, callback=True
+    ) == {"ok": True, "status": "waiting"}
+
+
+def test_old_result_cleanup_does_not_release_a_player_new_match():
+    app, first_client, second_client, first_guest, second_guest, old_match_id = (
+        _paired_clients(RequeueCleanupRoundConfig)
+    )
+    first_client.emit(
+        "player:ready",
+        {"match_id": old_match_id, "guest_id": first_guest["guest_id"]},
+        callback=True,
+    )
+    second_client.emit(
+        "player:ready",
+        {"match_id": old_match_id, "guest_id": second_guest["guest_id"]},
+        callback=True,
+    )
+    _wait_for(first_client, "results:ready")
+    _wait_for(second_client, "results:ready")
+
+    assert first_client.emit(
+        "match:leave",
+        {"match_id": old_match_id, "guest_id": first_guest["guest_id"]},
+        callback=True,
+    ) == {"ok": True}
+    assert first_client.emit(
+        "queue:join", {"guest_id": first_guest["guest_id"]}, callback=True
+    ) == {"ok": True, "status": "waiting"}
+
+    third_client = socketio.test_client(app)
+    third_guest = _new_guest(third_client)
+    new_match = third_client.emit(
+        "queue:join", {"guest_id": third_guest["guest_id"]}, callback=True
+    )
+    assert new_match["ok"] is True
+    assert new_match["match_id"] != old_match_id
+
+    time.sleep(RequeueCleanupRoundConfig.MATCH_CLEANUP_DELAY_MS / 1000 + 0.1)
+    service = app.extensions["matchmaking_service"]
+    active_match = service.get_match_for_guest(UUID(first_guest["guest_id"]))
+    assert active_match is not None
+    assert str(active_match.match_id) == new_match["match_id"]
+    assert service.get_guest(UUID(first_guest["guest_id"])).status == GuestStatus.MATCHED
+
+
 def test_disconnect_stops_an_active_round_and_notifies_opponent():
     (
         app,
@@ -254,7 +381,15 @@ def test_listener_switches_are_broadcast_repeatable_and_idempotent():
     assert first_switch["event"]["from_player_id"] == "B"
     assert first_switch["event"]["target_player_id"] == "A"
     assert first_switch["switches_remaining"] == {"A": 5, "B": 4}
-    assert _wait_for(first_client, "switch:triggered")["event"] == first_switch["event"]
+    first_events = first_client.get_received()
+    second_events = second_client.get_received()
+    for events in (first_events, second_events):
+        assert next(event for event in events if event["name"] == "switch:triggered")[
+            "args"
+        ][0]["event"] == first_switch["event"]
+        assert next(event for event in events if event["name"] == "transcript:event")[
+            "args"
+        ][0]["event"] == first_switch["event"]
 
     replay = second_client.emit(
         "switch:press",

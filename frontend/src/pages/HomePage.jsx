@@ -209,7 +209,7 @@ export function HomePage() {
         window.localStorage.setItem("improv-faceoff:guest-id", guestIdRef.current);
         socket.emit("queue:join", { guest_id: guestIdRef.current }, (joined) => {
           if (!joined?.ok) {
-            setNotice("Could not join the public queue.");
+            setNotice(joined?.error?.message ?? "Could not join the public queue.");
             setQueueState("error");
           }
         });
@@ -279,7 +279,7 @@ export function HomePage() {
   };
 
   if (screen === "media") {
-    return <MediaRoom match={match} guestId={guestIdRef.current} socket={socketRef.current} onLeave={returnHome} />;
+    return <MediaRoom match={match} guestId={guestIdRef.current} socket={socketRef.current} onLeave={returnHome} onRequeue={startSearch} />;
   }
 
   if (screen === "matchmaking") {
