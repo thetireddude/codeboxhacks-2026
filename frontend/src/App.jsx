@@ -1,11 +1,11 @@
 import { Route, Routes } from "react-router-dom";
 
-import { FoundationPage } from "./pages/FoundationPage.jsx";
+import { HomePage } from "./pages/HomePage.jsx";
 
 export default function App() {
   return (
     <Routes>
-      <Route path="*" element={<FoundationPage />} />
+      <Route path="*" element={<HomePage />} />
     </Routes>
   );
 }
