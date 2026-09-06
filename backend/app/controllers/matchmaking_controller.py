@@ -67,6 +67,24 @@ def register_matchmaking_handlers(
             _emit_error("STORAGE_UNAVAILABLE", "Matchmaking is temporarily unavailable")
             return {"ok": False}
 
+    @socketio.on("match:cancel")
+    def cancel_match(payload: dict | None) -> dict:
+        """Cancel a just-found match and release both players immediately."""
+        try:
+            guest_id = _required_uuid(payload)
+            match_id = UUID(str((payload or {})["match_id"]))
+            match = service.cancel_unstarted_match(guest_id, request.sid, match_id)
+            if match is None:
+                return {"ok": True, "cancelled": False}
+            _emit_match_cancelled(service, match)
+            return {"ok": True, "cancelled": True}
+        except (KeyError, MatchmakingError, ValueError) as error:
+            _emit_error("INVALID_PAYLOAD", str(error))
+            return {"ok": False}
+        except StorageUnavailableError:
+            _emit_error("STORAGE_UNAVAILABLE", "Matchmaking is temporarily unavailable")
+            return {"ok": False}
+
 
 def _emit_match_found(service: MatchmakingService, match) -> None:
     player_a = service.get_guest(match.player_a_id)
@@ -83,6 +101,17 @@ def _emit_match_found(service: MatchmakingService, match) -> None:
         match_found_payload(match, player_b, player_a),
         to=player_b.socket_id,
     )
+
+
+def _emit_match_cancelled(service: MatchmakingService, match) -> None:
+    payload = {
+        "match_id": str(match.match_id),
+        "message": "This match was cancelled before either player was ready.",
+    }
+    for guest_id in (match.player_a_id, match.player_b_id):
+        guest = service.get_guest(guest_id)
+        if guest is not None and guest.socket_id:
+            socketio.emit("match:cancelled", payload, to=guest.socket_id)
 
 
 def _emit_error(code: str, message: str) -> None:

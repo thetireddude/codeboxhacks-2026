@@ -40,6 +40,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
   const roomRef = useRef(null);
   const captureRef = useRef(null);
   const switchFeedbackTimerRef = useRef(null);
+  const switchFeedbackSequenceRef = useRef(0);
   const [connectionState, setConnectionState] = useState("setup");
   const [errorMessage, setErrorMessage] = useState("");
   const [devices, setDevices] = useState({ camera: false, microphone: false });
@@ -55,7 +56,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
   const [switchesRemaining, setSwitchesRemaining] = useState({ A: 0, B: 0 });
   const [captureCycle, setCaptureCycle] = useState(0);
   const [isSwitching, setIsSwitching] = useState(false);
-  const [showSwitchFeedback, setShowSwitchFeedback] = useState(false);
+  const [switchFeedback, setSwitchFeedback] = useState(null);
   const [results, setResults] = useState(null);
 
   const localPlayer = match.player_id;
@@ -110,11 +111,17 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
         setPartialTranscript("");
         setTranscriptionStatus("Switch received — starting your replacement response…");
         setCaptureCycle((current) => current + 1);
+        const sequence = switchFeedbackSequenceRef.current + 1;
+        switchFeedbackSequenceRef.current = sequence;
         window.clearTimeout(switchFeedbackTimerRef.current);
-        setShowSwitchFeedback(false);
+        // A new keyed element is mounted for every event. This reliably
+        // restarts CSS animation even when Switches arrive close together.
+        setSwitchFeedback(null);
         window.requestAnimationFrame(() => {
-          setShowSwitchFeedback(true);
-          switchFeedbackTimerRef.current = window.setTimeout(() => setShowSwitchFeedback(false), 1200);
+          setSwitchFeedback({ id: payload.event.id, sequence });
+          switchFeedbackTimerRef.current = window.setTimeout(() => {
+            setSwitchFeedback((current) => current?.sequence === sequence ? null : current);
+          }, 1200);
         });
       }
     };
@@ -392,10 +399,10 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
           )}
 
           <div className={`video-grid ${isInRound ? "game-video-grid" : ""}`}>
-            <article className={`video-tile video-tile--local ${round?.active_player_id === localPlayer ? "video-tile--active" : ""} ${showSwitchFeedback ? "video-tile--switched" : ""}`}>
+            <article className={`video-tile video-tile--local ${round?.active_player_id === localPlayer ? "video-tile--active" : ""} ${switchFeedback ? "video-tile--switched" : ""}`}>
               <video ref={localVideoRef} autoPlay muted playsInline className={hasLocalVideo ? "" : "video-tile__hidden"} />
               {!hasLocalVideo && <div className="video-placeholder"><b>YOU</b><span>{connectionState === "connecting" ? "CONNECTING CAMERA…" : "CAMERA PREVIEW"}</span></div>}
-              {showSwitchFeedback && <div className="switch-feedback" role="status" aria-live="assertive"><b>SWITCHED!</b></div>}
+              {switchFeedback && <div key={`${switchFeedback.id}-${switchFeedback.sequence}`} className="switch-feedback" role="status" aria-live="assertive"><b>SWITCHED!</b></div>}
               <div className="video-tile__label"><span>YOU · PLAYER {localPlayer}</span><b>{isInRound && round?.active_player_id !== localPlayer ? "○ TURN MUTED" : devices.microphone ? "● MIC ON" : "○ MIC OFF"}</b></div>
             </article>
             <article className={`video-tile video-tile--remote ${round?.active_player_id === opponentPlayer ? "video-tile--active" : ""}`}>
