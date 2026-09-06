@@ -6,5 +6,7 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 5173,
+    // Development-only Cloudflare Quick Tunnels use generated hostnames.
+    allowedHosts: [".trycloudflare.com"],
   },
 });
