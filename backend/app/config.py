@@ -23,6 +23,15 @@ def _as_origins(name: str, default: str) -> list[str]:
     ]
 
 
+def _as_words(name: str, default: str) -> tuple[str, ...]:
+    """Read a comma-separated role blacklist without empty entries."""
+    return tuple(
+        item.strip().lower()
+        for item in os.getenv(name, default).split(",")
+        if item.strip()
+    )
+
+
 class AppConfig:
     DEBUG = os.getenv("FLASK_ENV", "development") == "development"
     HOST = os.getenv("HOST", "127.0.0.1")
@@ -47,6 +56,12 @@ class AppConfig:
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
     GEMINI_SCENARIO_MODEL = os.getenv("GEMINI_SCENARIO_MODEL", "gemini-3.1-flash-lite")
     GEMINI_SCENARIO_MAX_ATTEMPTS = _as_int("GEMINI_SCENARIO_MAX_ATTEMPTS", 2)
+    # Roles must support a spoken, back-and-forth scene. Deployments can extend
+    # this comma-separated list through SCENARIO_ROLE_BLACKLIST.
+    SCENARIO_ROLE_BLACKLIST = _as_words(
+        "SCENARIO_ROLE_BLACKLIST",
+        "mime,mimes,mute,muted,nonverbal,non-verbal",
+    )
     GEMINI_JUDGE_MODEL = os.getenv("GEMINI_JUDGE_MODEL", "gemini-3.1-flash-lite")
     # Keep SDK retries disabled, but retry one failed structured judgment. This
     # protects live UUID-style transcripts from a transient/model-format miss
@@ -75,8 +90,9 @@ class AppConfig:
         "short two-person scene.\n\n"
         "Do not use real people, copyrighted characters, slurs, sexual content, "
         "graphic violence, illegal instructions, or stereotypes about protected "
-        "groups. Do not include a winner, scoring instruction, Switch rule, or "
-        "gameplay modifier."
+        "groups. Do not assign roles containing these words: "
+        f"{', '.join(SCENARIO_ROLE_BLACKLIST)}. Do not include a winner, scoring "
+        "instruction, Switch rule, or gameplay modifier."
     )
 
     STT_PROVIDER = os.getenv("STT_PROVIDER") or "deepgram"
