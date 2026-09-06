@@ -313,7 +313,11 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
       const ready = await new Promise((resolve) => {
         socket.emit("player:ready", { match_id: match.match_id, guest_id: guestId }, resolve);
       });
-      if (!ready?.ok) throw new Error("The match server could not mark you ready.");
+      if (!ready?.ok) {
+        throw new Error(
+          ready?.error?.message ?? "The match server could not mark you ready.",
+        );
+      }
     } catch (error) {
       detachMedia();
       setHasLocalVideo(false);

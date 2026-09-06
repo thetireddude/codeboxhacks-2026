@@ -5,12 +5,13 @@ import { HomePage } from "./pages/HomePage.jsx";
 import { GamePreviewPage } from "./pages/GamePreviewPage.jsx";
 import { LeaderboardPage } from "./pages/LeaderboardPage.jsx";
 import { SttTestPage } from "./pages/SttTestPage.jsx";
-import { getSfxVolume, playButtonSfx, setSfxVolume } from "./services/arcadeSfx.js";
+import { getSfxVolume, playButtonSfx, setSfxVolume, startBackgroundMusic } from "./services/arcadeSfx.js";
 
 export default function App() {
   const [sfxVolume, setSfxVolumeState] = useState(getSfxVolume);
   useEffect(() => {
     const onPointerDown = (event) => {
+      startBackgroundMusic();
       if (event.target.closest("button:not(:disabled)")) playButtonSfx();
     };
     document.addEventListener("pointerdown", onPointerDown);
