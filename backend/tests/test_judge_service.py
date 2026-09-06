@@ -6,7 +6,7 @@ import pytest
 from pydantic import TypeAdapter
 
 from app.models import JudgeInput, Scenario, TranscriptEvent
-from app.services.judge_service import JudgeError, JudgeService
+from app.services.judge_service import JudgeError, JudgeService, create_judge_service
 
 FIXTURE_DIR = Path(__file__).resolve().parents[2] / "shared" / "fixtures"
 
@@ -141,3 +141,17 @@ def test_reports_a_missing_api_key_without_calling_gemini():
         service.judge(_judge_input())
 
     assert service._client.models.calls == []
+
+
+def test_factory_accepts_the_script_configuration_class():
+    class ScriptConfig:
+        TESTING = False
+        GEMINI_API_KEY = "test-key"
+        GEMINI_JUDGE_MODEL = "gemini-test-model"
+        GEMINI_JUDGE_MAX_ATTEMPTS = 1
+        GEMINI_JUDGE_TIMEOUT_MS = 12_000
+
+    service = create_judge_service(ScriptConfig)
+
+    assert isinstance(service, JudgeService)
+    assert service._model == "gemini-test-model"
