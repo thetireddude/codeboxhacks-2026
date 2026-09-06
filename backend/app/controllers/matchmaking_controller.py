@@ -71,6 +71,26 @@ def register_matchmaking_handlers(
             _emit_error("STORAGE_UNAVAILABLE", "Matchmaking is temporarily unavailable")
             return {"ok": False}
 
+    @socketio.on("match:cancel")
+    def cancel_match(payload: dict | None) -> dict:
+        """Release both guests when either leaves before the round begins."""
+        try:
+            if not isinstance(payload, dict):
+                raise ValueError("payload must be an object")
+            guest_id = _required_uuid(payload)
+            match_id = UUID(str(payload["match_id"]))
+            match = service.cancel_unstarted_match(guest_id, request.sid, match_id)
+            if match is None:
+                return {"ok": True, "cancelled": False}
+            _emit_match_cancelled(service, match)
+            return {"ok": True, "cancelled": True}
+        except (KeyError, MatchmakingError, ValueError) as error:
+            _emit_error("INVALID_PAYLOAD", str(error))
+            return {"ok": False}
+        except StorageUnavailableError:
+            _emit_error("STORAGE_UNAVAILABLE", "Matchmaking is temporarily unavailable")
+            return {"ok": False}
+
     @socketio.on("match:leave")
     def leave_completed_match(payload: dict | None) -> dict:
         try:

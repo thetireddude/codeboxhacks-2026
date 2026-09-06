@@ -1005,6 +1005,7 @@ gates; no additional P milestones are planned for this release.
 |---|---|---|
 | Shared partial transcript | Complete | Polling-compatible transcript updates let the opponent see speech while it is still being spoken. |
 | Cloudflare realtime transport | Complete | The deployed path uses a polling-safe Socket.IO transport so tunnel/browser WebSocket upgrades do not block matchmaking or live updates. |
+| Abandoned guest recovery | Complete | Pre-round cancellation now releases both players, and a newly opened tab automatically replaces only a stale anonymous guest identity or stale match binding instead of blocking matchmaking. |
 | Judging resilience | Complete | Gemini judging is bounded, retains deterministic scoring fallback, logs safe failure context, and always releases the match from scoring. |
 | Switch presentation | Complete | Switch events are shared to both clients; the switched side receives the red vignette and `Switch!` popup. |
 | Arcade controls and audio | In progress | Pixel-style controls, persistent volume, button/Switch SFX, countdown/turn/round cues, and a lightweight quiz-game music loop are being finalized on the gameplay polish branch. |
