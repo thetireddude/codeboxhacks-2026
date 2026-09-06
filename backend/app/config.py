@@ -32,6 +32,7 @@ class AppConfig:
 
     ROUND_DURATION_MS = _as_int("ROUND_DURATION_MS", 60_000)
     COUNTDOWN_DURATION_MS = _as_int("COUNTDOWN_DURATION_MS", 3_000)
+    MATCH_CLEANUP_DELAY_MS = _as_int("MATCH_CLEANUP_DELAY_MS", 300_000)
     STARTING_SWITCH_COUNT = _as_int("STARTING_SWITCH_COUNT", 5)
     TURN_END_SILENCE_MS = _as_int("TURN_END_SILENCE_MS", 500)
     SWITCH_RESPONSE_MIN_MS = _as_int("SWITCH_RESPONSE_MIN_MS", 0)
@@ -83,3 +84,8 @@ class AppConfig:
     REDIS_URL = os.getenv("REDIS_URL") or "redis://localhost:6379/0"
     REDIS_KEY_PREFIX = os.getenv("REDIS_KEY_PREFIX", "improv-faceoff")
     USE_IN_MEMORY_REDIS = os.getenv("USE_IN_MEMORY_REDIS", "false").lower() == "true"
+
+    LIVEKIT_URL = os.getenv("LIVEKIT_URL", "")
+    LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "")
+    LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "")
+    LIVEKIT_TOKEN_TTL_SECONDS = _as_int("LIVEKIT_TOKEN_TTL_SECONDS", 3_600)

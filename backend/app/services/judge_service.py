@@ -5,7 +5,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.models.judgment import JudgeInput, JudgeResult
+from app.models.judgment import (
+    JudgeInput,
+    JudgeResult,
+    JudgedPlayer,
+    SemanticCategoryPoints,
+)
 
 
 class JudgeError(RuntimeError):
@@ -200,9 +205,26 @@ class JudgeService:
 
 def create_judge_service(config: Any) -> JudgeService:
     """Build the configured A5 Gemini judge at the application boundary."""
+    if config.get("TESTING"):
+        return TestJudgeService()
     return JudgeService(
         api_key=config["GEMINI_API_KEY"],
         model=config["GEMINI_JUDGE_MODEL"],
         max_attempts=config["GEMINI_JUDGE_MAX_ATTEMPTS"],
         timeout_ms=config["GEMINI_JUDGE_TIMEOUT_MS"],
     )
+
+
+class TestJudgeService:
+    """Deterministic semantic result used only by the application test configuration."""
+
+    def judge(self, _judge_input: JudgeInput) -> JudgeResult:
+        points = SemanticCategoryPoints(
+            adaptability=0, creativity=0, coherence=0, collaboration=0
+        )
+        player = JudgedPlayer(
+            category_points=points,
+            highlight="Round complete.",
+            improvement="Keep building together.",
+        )
+        return JudgeResult(player_a=player, player_b=player)

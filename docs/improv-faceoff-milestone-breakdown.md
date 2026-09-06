@@ -80,6 +80,14 @@ Both receive same match_id
 Player A / Player B assigned
 ```
 
+### Current implementation status — Complete
+
+- `guest:create`, `queue:join`, and `queue:leave` are Socket.IO handlers.
+- Guests are anonymous, socket-bound, and receive deterministic display names.
+- Redis storage has an atomic queue claim; an in-memory implementation supports
+  tests. Pairing creates temporary match state, assigns waiting player A and
+  joining player B, and emits `match:found` to both clients.
+
 ---
 
 ## Milestone B2 — Authoritative Game State
@@ -108,6 +116,16 @@ During development, use fake speech-end events.
 ### Done When
 
 Two test clients can complete a synchronized fake 60-second round.
+
+### Current implementation status — Complete for development-only fake speech-end rounds
+
+- Ready, countdown, round start, a server-owned configurable timer, active
+  speaker tracking, fake `turn:complete`, round end, and `SCORING` transition
+  are implemented and tested.
+- Actions after the round are rejected; disconnect emits `player:disconnected`
+  and ends active/countdown rounds.
+- `RESULTS` transition exists in the service but is not reachable until B5
+  supplies an actual result object. `CONNECTING_MEDIA` is modeled but unused.
 
 ---
 
@@ -146,6 +164,15 @@ Player A remains active
 Player A can be Switched again
 ```
 
+### Current implementation status — Complete for authoritative Switch validation
+
+- Five Switches per player, listener-only validation, timestamping, inventory
+  decrement, repeated Switches, idempotent request IDs, state persistence, and
+  `switch:triggered` / `switch:rejected` broadcasts are implemented and tested.
+- The target remains active speaker and Switch is rejected after the round.
+- `SWITCH_MODE` and `CHAIN_SWITCH_WINDOW_MS` are configurable but not yet used
+  to enforce an additional chain-window policy.
+
 ---
 
 ## Milestone B4 — LiveKit Backend
@@ -170,6 +197,19 @@ Allow matched players to securely connect to the same media room.
 
 Two matched players can receive valid LiveKit credentials for the same room.
 
+### Current implementation status — Complete
+
+- `livekit-api` is configured server-side. A deterministic
+  `improv-faceoff-<match-id>` room name is derived from each match.
+- Each participant receives a distinct, configurable-TTL token scoped to that
+  room with publish, subscribe, and data-publish grants.
+- Credentials are available through socket-bound `media:credentials` and
+  `POST /api/matches/<match_id>/livekit-token`; configuration and token errors
+  are handled.
+- The Socket.IO route is identity-bound. The HTTP route currently accepts a
+  supplied `guest_id` without equivalent session authentication, so it should
+  not be the production frontend path until that binding is added.
+
 ---
 
 ## Milestone B5 — Backend Service Integration
@@ -193,6 +233,19 @@ Connect the backend game engine to AI, transcription, and scoring services.
 ### Done When
 
 The backend can complete a full mocked match using fake AI and transcription services.
+
+### Current implementation status — Complete for mocked service integration
+
+- A match now uses an injectable scenario provider (Gemini when configured,
+  otherwise the development mock) before broadcasting `round:prepare`.
+- Match-bound final STT events are validated against the active player,
+  persisted as canonical `SpeechEvent`s, broadcast as `transcript:event`, and
+  advance the authoritative turn. Switches also invoke a transcription-service
+  integration hook.
+- At round end, a judge provider is started through the integration service;
+  its validated `MatchResults` moves the match to `RESULTS` and is broadcast as
+  `results:ready`. The current provider is deterministic/mock pending A5.
+- Completed/disconnected matches are removed after configurable delayed cleanup.
 
 ---
 
@@ -580,6 +633,42 @@ Frontend Find Match
 ### Done When
 
 Two real browsers can find and enter the same match.
+
+### Current implementation status — Complete for matchmaking
+
+Two separate browser sessions successfully connected to the backend, entered the
+public queue, and received the same match with opposite Player A/Player B
+assignments. The temporary Cloudflare Tunnel used for that remote test has been
+removed; it was test infrastructure only and is not part of the application.
+
+#### Implemented files and responsibilities
+
+- `frontend/src/pages/HomePage.jsx` — opens the Socket.IO connection, creates
+  or restores an anonymous guest, joins/leaves the queue, handles
+  `match:found`, `match:error`, and connection errors, and shows the real
+  opponent and assigned player slot in the matchmaking UI.
+- `frontend/src/services/config.js` — supplies the configurable
+  `VITE_BACKEND_URL` backend origin used by the Socket.IO client.
+- `backend/app/controllers/matchmaking_controller.py` — provides the
+  `guest:create`, `queue:join`, and `queue:leave` Socket.IO handlers and emits
+  the match result to both matched sockets.
+- `backend/app/services/matchmaking_service.py` and
+  `backend/app/services/redis_service.py` — own guest identity, queueing, and
+  player pairing/state persistence.
+- `backend/app/views/socket_views.py` and `shared/events.md` — define the
+  client-safe `match:found` payload and the shared realtime-event contract.
+
+#### Not implemented by I1
+
+- The matched payload is not yet passed into the media/game UI. `MediaRoom`
+  still uses local mock player names, scenario data, timer, transcript, Switch,
+  and results state.
+- The frontend does not yet request LiveKit credentials, join a LiveKit room,
+  publish media, or display the remote participant. That is Milestone I2.
+- Reconnection/resume behavior after a browser refresh or network drop has not
+  been integrated into the active match flow.
+- The temporary remote-testing setup is intentionally not a deployment. A
+  permanent HTTPS frontend/backend deployment belongs to D1/D2.
 
 ---
 

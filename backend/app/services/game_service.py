@@ -89,6 +89,16 @@ class GameService:
             self._storage.save_match(match)
             return match
 
+    def set_scenario(self, match_id: UUID, scenario: Scenario) -> MatchState:
+        """Persist the one validated scenario shared by both participants."""
+        with self._lock:
+            match = self._require_match(match_id)
+            if match.state != MatchStatus.COUNTDOWN:
+                raise GameStateError("Scenario can only be set during countdown")
+            match = match.model_copy(update={"scenario": scenario})
+            self._storage.save_match(match)
+            return match
+
     def complete_turn(self, match_id: UUID, guest_id: UUID) -> MatchState:
         with self._lock:
             match = self._require_match(match_id)
@@ -292,6 +302,32 @@ class GameService:
             self._storage.save_switch_request(match_id, request_id, event)
             return match, event, False, interrupted_event
 
+    def append_transcript_event(
+        self, match_id: UUID, guest_id: UUID, event
+    ) -> MatchState:
+        """Accept one canonical service-produced transcript event.
+
+        Speech is accepted only from the authoritative active speaker. Switch
+        events are already created by ``press_switch`` and must not be submitted
+        through this path.
+        """
+        with self._lock:
+            match = self._require_match(match_id)
+            self._require_player(match, guest_id)
+            if match.state != MatchStatus.ROUND_ACTIVE:
+                raise GameStateError("Round is not active")
+            if getattr(event, "type", None) != "speech":
+                raise GameStateError("Only speech events may be appended here")
+            if event.player_id != self._slot_for_guest(match, guest_id):
+                raise GameStateError("Speech event does not belong to this guest")
+            if event.player_id != match.active_player_id:
+                raise GameStateError("Only the active speaker may submit speech")
+            match = match.model_copy(
+                update={"transcript_events": [*match.transcript_events, event]}
+            )
+            self._storage.save_match(match)
+            return match
+
     def end_round(self, match_id: UUID) -> MatchState:
         with self._lock:
             match = self._require_match(match_id)
@@ -322,6 +358,11 @@ class GameService:
             match = match.model_copy(update={"state": MatchStatus.RESULTS})
             self._storage.save_match(match)
             return match
+
+    def elapsed_ms(self, match_id: UUID) -> int:
+        """Return authoritative milliseconds from round start for service events."""
+        match = self._require_match(match_id)
+        return self._elapsed_ms(match)
 
     def disconnect_player(self, match_id: UUID, guest_id: UUID) -> MatchState:
         with self._lock:
