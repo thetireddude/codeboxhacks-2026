@@ -48,6 +48,19 @@ The command prints one validated scenario as formatted JSON. It makes one live
 Gemini request and may retry once if Gemini returns an invalid response or a
 temporary error.
 
+### Test Gemini post-round judging
+
+With `GEMINI_API_KEY` configured, run this from `backend/`:
+
+```powershell
+python generate_judgment.py
+```
+
+The command submits the shared scenario and completed transcript fixture,
+including rejected speech, Switch events, and response timing metadata. It
+prints Gemini's validated semantic judgment; Speed points and final score
+aggregation remain the later A6 responsibility.
+
 ### Enable live speech-to-text
 
 Create a free Deepgram account, generate an API key, and put it only in
