@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from random import choice
+import re
 from typing import Any
 
 from app.models import Scenario, Tone
@@ -40,6 +41,7 @@ class ScenarioService:
         max_attempts: int = 2,
         tone_pool: Sequence[Tone],
         prompt_template: str,
+        role_blacklist: Sequence[str] = (),
         client: Any | None = None,
         tone_selector: Callable[[Sequence[Tone]], Tone] = choice,
     ) -> None:
@@ -55,6 +57,7 @@ class ScenarioService:
         self._max_attempts = max_attempts
         self._tone_pool = tuple(tone_pool)
         self._prompt_template = prompt_template
+        self._role_blacklist = tuple(word.lower() for word in role_blacklist)
         self._client = client
         self._tone_selector = tone_selector
 
@@ -83,7 +86,9 @@ class ScenarioService:
                         "response_schema": self._response_schema(),
                     },
                 )
-                return Scenario.model_validate(response.parsed)
+                scenario = Scenario.model_validate(response.parsed)
+                self._validate_roles(scenario)
+                return scenario
             except ScenarioGenerationError:
                 raise
             except Exception as error:
@@ -107,6 +112,16 @@ class ScenarioService:
 
     def _build_prompt(self, tone: Tone) -> str:
         return self._prompt_template.format(tone=tone.value)
+
+    def _validate_roles(self, scenario: Scenario) -> None:
+        """Reject a generated role that violates the deployment blacklist."""
+        roles = (scenario.player_a_role, scenario.player_b_role)
+        for word in self._role_blacklist:
+            pattern = rf"(?<!\w){re.escape(word)}(?!\w)"
+            if any(re.search(pattern, role, flags=re.IGNORECASE) for role in roles):
+                raise ValueError(
+                    "Scenario generation returned a blacklisted role; retrying."
+                )
 
     def _response_schema(self) -> dict[str, Any]:
         return {
@@ -134,4 +149,5 @@ def create_scenario_service(config: Any) -> ScenarioService | MockScenarioServic
         max_attempts=config["GEMINI_SCENARIO_MAX_ATTEMPTS"],
         tone_pool=config["GEMINI_SCENARIO_TONES"],
         prompt_template=config["GEMINI_SCENARIO_PROMPT_TEMPLATE"],
+        role_blacklist=config["SCENARIO_ROLE_BLACKLIST"],
     )
