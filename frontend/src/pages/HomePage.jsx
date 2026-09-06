@@ -281,7 +281,7 @@ export function HomePage() {
                 <h1>SEARCHING FOR<br /><span>AN IMPROV<br />PARTNER...</span></h1>
                 <p className="queue-copy">You&apos;re in. We&apos;ll pair you with another player as soon as someone steps up to the stage.</p>
                 <div className="queue-meter" aria-label="Searching"><i /><i /><i /><i /><i /></div>
-                <div className="queue-actions"><button className="cancel-button" type="button" onClick={returnHome}>CANCEL</button><button className="queue-help" type="button" onClick={() => setQueueState("error")}>TEST ERROR</button></div>
+                <div className="queue-actions"><button className="cancel-button" type="button" onClick={returnHome}>CANCEL</button></div>
               </>
             )}
             <p className="home-notice matchmaking-notice" role="status" aria-live="polite">{notice}</p>
