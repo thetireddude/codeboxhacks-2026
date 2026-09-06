@@ -3,6 +3,7 @@ Flask-Cors>=4.0,<7.0
 Flask-SocketIO>=5.3,<6.0
 google-genai>=2.3,<3.0
 deepgram-sdk>=7.0,<8.0
+livekit-api>=1.0,<2.0
 redis>=5.0,<7.0
 pydantic>=2.8,<3.0
 python-dotenv>=1.0,<2.0
