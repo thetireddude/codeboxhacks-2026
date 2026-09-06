@@ -634,6 +634,42 @@ Frontend Find Match
 
 Two real browsers can find and enter the same match.
 
+### Current implementation status — Complete for matchmaking
+
+Two separate browser sessions successfully connected to the backend, entered the
+public queue, and received the same match with opposite Player A/Player B
+assignments. The temporary Cloudflare Tunnel used for that remote test has been
+removed; it was test infrastructure only and is not part of the application.
+
+#### Implemented files and responsibilities
+
+- `frontend/src/pages/HomePage.jsx` — opens the Socket.IO connection, creates
+  or restores an anonymous guest, joins/leaves the queue, handles
+  `match:found`, `match:error`, and connection errors, and shows the real
+  opponent and assigned player slot in the matchmaking UI.
+- `frontend/src/services/config.js` — supplies the configurable
+  `VITE_BACKEND_URL` backend origin used by the Socket.IO client.
+- `backend/app/controllers/matchmaking_controller.py` — provides the
+  `guest:create`, `queue:join`, and `queue:leave` Socket.IO handlers and emits
+  the match result to both matched sockets.
+- `backend/app/services/matchmaking_service.py` and
+  `backend/app/services/redis_service.py` — own guest identity, queueing, and
+  player pairing/state persistence.
+- `backend/app/views/socket_views.py` and `shared/events.md` — define the
+  client-safe `match:found` payload and the shared realtime-event contract.
+
+#### Not implemented by I1
+
+- The matched payload is not yet passed into the media/game UI. `MediaRoom`
+  still uses local mock player names, scenario data, timer, transcript, Switch,
+  and results state.
+- The frontend does not yet request LiveKit credentials, join a LiveKit room,
+  publish media, or display the remote participant. That is Milestone I2.
+- Reconnection/resume behavior after a browser refresh or network drop has not
+  been integrated into the active match flow.
+- The temporary remote-testing setup is intentionally not a deployment. A
+  permanent HTTPS frontend/backend deployment belongs to D1/D2.
+
 ---
 
 ## Milestone I2 — Media Integration
