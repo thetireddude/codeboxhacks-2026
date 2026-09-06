@@ -16,6 +16,7 @@ changing a required field is a breaking contract change.
 | `queue:leave` | `{ guest_id }` | Leave the public queue. |
 | `player:ready` | `{ match_id, guest_id }` | Confirm the client is ready. |
 | `switch:press` | `{ match_id, guest_id, request_id }` | Request a Switch; `request_id` supports idempotent handling. |
+| `turn:complete` | `{ match_id, guest_id }` | Development-only fake speech-end signal; the server validates ownership before changing turns. |
 
 ## Socket acknowledgements
 

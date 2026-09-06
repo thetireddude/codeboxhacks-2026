@@ -75,6 +75,13 @@ return { 'waiting' }
         payload = self._get_json(self._match_key(match_id))
         return MatchState.model_validate(payload) if payload else None
 
+    def get_match_for_guest(self, guest_id: UUID) -> MatchState | None:
+        try:
+            match_id = self._client.get(f"{self._guest_match_prefix()}{guest_id}")
+        except RedisError as error:
+            raise StorageUnavailableError("Redis is unavailable") from error
+        return self.get_match(UUID(match_id)) if match_id else None
+
     def claim_queue_slot(
         self, guest_id: UUID, match_id: UUID
     ) -> tuple[str, UUID | None]:
@@ -156,6 +163,10 @@ class InMemoryRedisService:
 
     def get_match(self, match_id: UUID) -> MatchState | None:
         return self._matches.get(match_id)
+
+    def get_match_for_guest(self, guest_id: UUID) -> MatchState | None:
+        match_id = self._guest_matches.get(guest_id)
+        return self._matches.get(match_id) if match_id else None
 
     def claim_queue_slot(
         self, guest_id: UUID, match_id: UUID

@@ -88,6 +88,7 @@ class MatchmakingService:
             match_id=match_id,
             player_a_id=waiting_guest.guest_id,
             player_b_id=joining_guest.guest_id,
+            ready_player_ids=[],
             state=MatchStatus.MATCH_FOUND,
             scenario=None,
             round_started_at=None,
@@ -98,3 +99,6 @@ class MatchmakingService:
             ),
             transcript_events=[],
         )
+
+    def get_match_for_guest(self, guest_id: UUID) -> MatchState | None:
+        return self._storage.get_match_for_guest(guest_id)

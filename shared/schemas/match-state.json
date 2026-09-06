@@ -8,6 +8,7 @@
     "match_id",
     "player_a_id",
     "player_b_id",
+    "ready_player_ids",
     "state",
     "scenario",
     "round_started_at",
@@ -19,6 +20,12 @@
     "match_id": { "type": "string", "format": "uuid" },
     "player_a_id": { "type": "string", "format": "uuid" },
     "player_b_id": { "type": "string", "format": "uuid" },
+    "ready_player_ids": {
+      "type": "array",
+      "items": { "type": "string", "format": "uuid" },
+      "uniqueItems": true,
+      "maxItems": 2
+    },
     "state": {
       "type": "string",
       "enum": [

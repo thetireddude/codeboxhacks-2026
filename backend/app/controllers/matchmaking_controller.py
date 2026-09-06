@@ -16,12 +16,15 @@ from app.views.socket_views import (
 )
 
 
-def register_matchmaking_handlers(service: MatchmakingService) -> None:
+def register_matchmaking_handlers(
+    service: MatchmakingService, socket_guests: dict[str, str]
+) -> None:
     @socketio.on("guest:create")
     def create_guest(payload: dict | None = None) -> dict:
         try:
             guest_id = _optional_uuid((payload or {}).get("guest_id"))
             guest = service.create_guest(request.sid, guest_id)
+            socket_guests[request.sid] = str(guest.guest_id)
             return {"ok": True, "guest": guest_created_payload(guest)}
         except (MatchmakingError, ValueError) as error:
             return {
