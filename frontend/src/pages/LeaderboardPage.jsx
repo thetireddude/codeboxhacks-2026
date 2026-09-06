@@ -24,14 +24,20 @@ export function LeaderboardPage() {
 
   return (
     <main className="leaderboard-page">
-      <header className="guest-banner"><Link to="/">← LOBBY</Link><span>TOP IMPROVISERS</span></header>
+      <header className="guest-banner"><Link to="/">← LOBBY</Link><span>HIGH SCORE ARCADE</span></header>
       <section className="leaderboard-card" aria-labelledby="leaderboard-title">
-        <p className="leaderboard-kicker">{state.sample ? "SAMPLE LEADERBOARD" : "LIVE LEADERBOARD"}</p>
-        <h1 id="leaderboard-title">RANKS</h1>
+        <div className="leaderboard-card__bolts" aria-hidden="true"><i /><i /><i /><i /></div>
+        <div className="leaderboard-marquee">
+          <p className="leaderboard-kicker">{state.sample ? "SAMPLE LEADERBOARD" : "LIVE LEADERBOARD"}</p>
+          <h1 id="leaderboard-title">HIGH<br /><span>SCORES</span></h1>
+          <p className="leaderboard-marquee__sub">IMPROV FACEOFF HALL OF FAME</p>
+        </div>
         {state.loading ? <p className="leaderboard-status">Loading scores…</p> : state.entries.length === 0 ? <p className="leaderboard-status">No completed matches yet. Set the first high score.</p> : (
           <ol className="leaderboard-list">
             {state.entries.map((entry) => <li key={entry.guest_id} className={entry.guest_id === guestId ? "leaderboard-entry leaderboard-entry--you" : "leaderboard-entry"}>
-              <b>#{entry.rank}</b><span>{entry.display_name}{entry.guest_id === guestId ? " (YOU)" : ""}</span><strong>{entry.best_score.toLocaleString()}</strong><small>{entry.games_played} games</small>
+              <b className={`leaderboard-rank leaderboard-rank--${entry.rank}`}>#{entry.rank}</b>
+              <span className="leaderboard-player">{entry.display_name}{entry.guest_id === guestId ? " (YOU)" : ""}</span>
+              <strong>{entry.best_score.toLocaleString()}</strong><small>{entry.games_played} games</small>
             </li>)}
           </ol>
         )}
