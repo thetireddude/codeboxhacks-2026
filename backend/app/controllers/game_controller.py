@@ -9,6 +9,7 @@ from flask import request
 
 from app import socketio
 from app.services.game_service import GameService, GameStateError, SwitchRejectedError
+from app.services.judge_service import JudgeError
 from app.services.match_integration_service import MatchIntegrationService
 from app.services.matchmaking_service import MatchmakingService
 from app.services.redis_service import StorageUnavailableError
@@ -269,6 +270,24 @@ def _run_round(
             match,
             "results:ready",
             results_ready_payload(results),
+        )
+        socketio.start_background_task(
+            _cleanup_match_after_delay,
+            matchmaking_service,
+            match_id,
+            cleanup_delay_ms,
+        )
+    except JudgeError:
+        # Gemini failures happen in this background task; surface them to both
+        # players rather than leaving the result screen in a permanent wait.
+        _emit_to_match(
+            matchmaking_service,
+            match,
+            "match:error",
+            match_error_payload(
+                "JUDGING_UNAVAILABLE",
+                "Gemini could not finish judging this round. Please start a new match.",
+            ),
         )
         socketio.start_background_task(
             _cleanup_match_after_delay,

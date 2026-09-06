@@ -4,6 +4,7 @@ from uuid import UUID
 from app import create_app, socketio
 from app.config import AppConfig
 from app.models import MatchStatus
+from app.services.judge_service import JudgeError
 
 
 class FastRoundConfig(AppConfig):
@@ -126,6 +127,28 @@ def test_ready_countdown_turns_and_authoritative_round_end():
         {"match_id": match_id, "guest_id": first_guest["guest_id"]},
         callback=True,
     ) == {"ok": False}
+
+
+def test_judge_failure_notifies_both_players_instead_of_stalling():
+    app, first_client, second_client, first_guest, second_guest, match_id = (
+        _paired_clients()
+    )
+
+    def fail_judging(_match_id):
+        raise JudgeError("provider timeout")
+
+    app.extensions["match_integration_service"].judge_round = fail_judging
+    first_client.emit(
+        "player:ready", {"match_id": match_id, "guest_id": first_guest["guest_id"]}, callback=True
+    )
+    second_client.emit(
+        "player:ready", {"match_id": match_id, "guest_id": second_guest["guest_id"]}, callback=True
+    )
+
+    first_error = _wait_for(first_client, "match:error")
+    second_error = _wait_for(second_client, "match:error")
+    assert first_error["code"] == "JUDGING_UNAVAILABLE"
+    assert second_error == first_error
 
 
 def test_disconnect_stops_an_active_round_and_notifies_opponent():

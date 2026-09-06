@@ -843,11 +843,15 @@ Automatic turns, mid-sentence Switches, and repeated Switches work live.
 The game UI now renders the server-owned active speaker, Switch inventory, and
 an enabled Switch control only for the listener. It sends idempotent
 `switch:press` requests, consumes accepted/rejected Switch payloads, displays
-Switch events in the transcript, and restarts the interrupted local PCM16
+Switch events inline in the chronological transcript, and restarts the interrupted local PCM16
 stream for the required replacement response. Normal speech finalization
 continues to consume the authoritative `turn:changed` event. The remaining
 I5 completion check is a two-browser test covering automatic turns,
 mid-sentence Switches, and repeated Switches.
+The default turn-end silence window is 900 ms (within the 700–1200 ms
+playtesting range) so the listener has a meaningful opportunity to Switch
+before a normal response finalizes; it remains configurable through
+`TURN_END_SILENCE_MS`.
 
 ---
 
@@ -884,6 +888,9 @@ The result view displays winner/tie status, both final totals, every arcade
 category, each player's best moment and improvement, and the shared highlight
 reel. The remaining I6 completion check is a real two-browser round using
 Gemini judging to confirm both clients receive and render the same payload.
+If Gemini fails in the background judging task, both players now receive a
+clear `JUDGING_UNAVAILABLE` match error and the match is scheduled for cleanup
+instead of remaining indefinitely in the scoring state.
 
 ---
 

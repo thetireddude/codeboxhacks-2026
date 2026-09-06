@@ -52,7 +52,6 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
   const [partialTranscript, setPartialTranscript] = useState("");
   const [transcriptionStatus, setTranscriptionStatus] = useState("Waiting for the round to start.");
   const [switchesRemaining, setSwitchesRemaining] = useState({ A: 0, B: 0 });
-  const [switchNotices, setSwitchNotices] = useState([]);
   const [captureCycle, setCaptureCycle] = useState(0);
   const [isSwitching, setIsSwitching] = useState(false);
   const [results, setResults] = useState(null);
@@ -94,7 +93,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
     const onTranscriptEvent = (payload) => {
       if (payload.match_id !== match.match_id) return;
       if (payload.event?.type === "switch") {
-        setSwitchNotices((current) => [...current, payload.event]);
+        setTranscript((current) => current.some((line) => line.id === payload.event.id) ? current : [...current, payload.event]);
         return;
       }
       if (payload.event?.type !== "speech") return;
@@ -130,12 +129,18 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       setResults(payload.results ?? null);
       setConnectionState("results");
     };
+    const onMatchError = (payload) => {
+      if (payload.code !== "JUDGING_UNAVAILABLE") return;
+      setConnectionState("ended");
+      setErrorMessage(payload.message);
+    };
     const onDisconnect = () => setErrorMessage("The match server disconnected. Leave and find a new match.");
 
     socket.on("round:prepare", onPrepare);
     socket.on("round:start", onStart);
     socket.on("round:end", onEnd);
     socket.on("results:ready", onResultsReady);
+    socket.on("match:error", onMatchError);
     socket.on("turn:changed", onTurnChanged);
     socket.on("transcript:event", onTranscriptEvent);
     socket.on("speech:partial", onPartial);
@@ -147,6 +152,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       socket.off("round:start", onStart);
       socket.off("round:end", onEnd);
       socket.off("results:ready", onResultsReady);
+      socket.off("match:error", onMatchError);
       socket.off("turn:changed", onTurnChanged);
       socket.off("transcript:event", onTranscriptEvent);
       socket.off("speech:partial", onPartial);
@@ -343,9 +349,8 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
             <header><span>LIVE SCENE TRANSCRIPT</span><b>{round?.active_player_id === localPlayer ? "YOUR TURN" : `PLAYER ${round?.active_player_id ?? "?"} SPEAKING`}</b></header>
             <div className="round-log__entries">
               {transcript.length === 0 && !partialTranscript && <p className="round-log__entry round-log__entry--round">LISTENING FOR THE FIRST LINE…</p>}
-              {transcript.map((line) => <p key={line.id} className="round-log__entry"><strong>PLAYER {line.player_id}:</strong> {line.text}</p>)}
+              {transcript.map((line) => line.type === "switch" ? <p key={line.id} className="round-log__entry round-log__entry--switch">↯ PLAYER {line.from_player_id} SWITCHED PLAYER {line.target_player_id}</p> : <p key={line.id} className={line.accepted ? "round-log__entry" : "round-log__entry round-log__entry--interrupted"}><strong>PLAYER {line.player_id}:</strong> {line.text}</p>)}
               {partialTranscript && <p className="round-log__entry round-log__entry--active"><strong>PLAYER {localPlayer}:</strong> {partialTranscript}</p>}
-              {switchNotices.map((event) => <p key={event.id} className="round-log__entry round-log__entry--switch">↯ PLAYER {event.from_player_id} SWITCHED PLAYER {event.target_player_id}</p>)}
             </div>
           </section>}
 
@@ -355,6 +360,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
           {errorMessage && <p className="media-error" role="alert">{errorMessage}</p>}
           <p className="media-connection" role="status"><i />{connectionMessage(connectionState)}</p>
           {connectionState === "active" && <p className="media-connection"><i />{transcriptionStatus}</p>}
+          {connectionState === "ended" && !errorMessage && <p className="media-connection"><i />GEMINI IS JUDGING THE FINAL TRANSCRIPT…</p>}
           </>}
         </div>
       </section>

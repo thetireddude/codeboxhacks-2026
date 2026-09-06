@@ -34,7 +34,9 @@ class AppConfig:
     COUNTDOWN_DURATION_MS = _as_int("COUNTDOWN_DURATION_MS", 3_000)
     MATCH_CLEANUP_DELAY_MS = _as_int("MATCH_CLEANUP_DELAY_MS", 300_000)
     STARTING_SWITCH_COUNT = _as_int("STARTING_SWITCH_COUNT", 5)
-    TURN_END_SILENCE_MS = _as_int("TURN_END_SILENCE_MS", 500)
+    # Give the listener a practical Switch window before STT ends the turn.
+    # This stays configurable for playtesting; the spec recommends 700–1200 ms.
+    TURN_END_SILENCE_MS = _as_int("TURN_END_SILENCE_MS", 900)
     SWITCH_RESPONSE_MIN_MS = _as_int("SWITCH_RESPONSE_MIN_MS", 0)
     SWITCH_MODE = os.getenv("SWITCH_MODE", "ALWAYS_AVAILABLE_DURING_OPPONENT_TURN")
     CHAIN_SWITCH_WINDOW_MS = _as_int("CHAIN_SWITCH_WINDOW_MS", 500)
