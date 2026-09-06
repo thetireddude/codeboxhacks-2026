@@ -15,6 +15,7 @@ from app.models.judgment import (
 from app.models.scoring import ScoringInput
 from .game_service import GameService
 from .judge_service import JudgeError, JudgeService
+from .leaderboard_service import LeaderboardUnavailableError
 from .scenario_service import ScenarioService
 from .scoring_service import ScoringService
 
@@ -29,11 +30,13 @@ class MatchIntegrationService:
         scenario_service: ScenarioService,
         judge_service: JudgeService,
         scoring_service: ScoringService,
+        leaderboard_repository,
     ) -> None:
         self._game_service = game_service
         self._scenario_service = scenario_service
         self._judge_service = judge_service
         self._scoring_service = scoring_service
+        self._leaderboard_repository = leaderboard_repository
 
     def prepare_round(self, match_id: UUID) -> MatchState:
         return self._game_service.set_scenario(
@@ -72,7 +75,14 @@ class MatchIntegrationService:
                 round_duration_ms=self._game_service.round_duration_ms,
             )
         )
-        return self._game_service.complete_scoring(match_id, results), results
+        completed_match = self._game_service.complete_scoring(match_id, results)
+        try:
+            self._leaderboard_repository.record_completed_match(completed_match, results)
+        except LeaderboardUnavailableError:
+            # Match results remain authoritative even when the optional durable
+            # leaderboard store is offline. A later retry/outbox can backfill.
+            logger.exception("Could not persist leaderboard score for match %s", match_id)
+        return completed_match, results
 
     @staticmethod
     def _unavailable_judgment() -> JudgeResult:

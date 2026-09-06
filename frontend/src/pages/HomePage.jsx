@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { io } from "socket.io-client";
 
 import { appConfig } from "../services/config.js";
@@ -14,6 +15,7 @@ const messages = {
 };
 
 export function HomePage() {
+  const navigate = useNavigate();
   const [notice, setNotice] = useState("");
   const [screen, setScreen] = useState("home");
   const [queueState, setQueueState] = useState("searching");
@@ -405,7 +407,7 @@ export function HomePage() {
           <p className="home-hero__motto">THINK FAST. SAY YES. IMPROVISE.</p>
           <button className="match-button" type="button" onClick={startSearch}>FIND MATCH</button>
           <div className="home-actions">
-            <button className="home-action home-action--gold" type="button" onClick={() => handleClick("leaderboard")}>RANKS</button>
+            <button className="home-action home-action--gold" type="button" onClick={() => navigate("/leaderboard")}>RANKS</button>
             <button className="home-action home-action--blue" type="button" onClick={() => handleClick("modes")}>MODES</button>
           </div>
           <p className="home-notice" role="status" aria-live="polite">{notice}</p>

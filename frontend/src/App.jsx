@@ -3,6 +3,7 @@ import { Route, Routes } from "react-router-dom";
 
 import { HomePage } from "./pages/HomePage.jsx";
 import { GamePreviewPage } from "./pages/GamePreviewPage.jsx";
+import { LeaderboardPage } from "./pages/LeaderboardPage.jsx";
 import { SttTestPage } from "./pages/SttTestPage.jsx";
 import { getSfxVolume, playButtonSfx, setSfxVolume } from "./services/arcadeSfx.js";
 
@@ -27,6 +28,7 @@ export default function App() {
       <Routes>
         <Route path="/dev/game-preview" element={<GamePreviewPage />} />
         <Route path="/stt-test" element={<SttTestPage />} />
+        <Route path="/leaderboard" element={<LeaderboardPage />} />
         <Route path="*" element={<HomePage />} />
       </Routes>
       <label className="sfx-volume-control">
