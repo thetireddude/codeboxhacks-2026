@@ -438,9 +438,10 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
               {switchFeedbackVisible && <div key={switchFeedback.eventId} className="switch-feedback" role="status" aria-live="assertive"><b>SWITCHED!</b></div>}
               <div className="video-tile__label"><span>YOU · PLAYER {localPlayer}</span><b>{isInRound && round?.active_player_id !== localPlayer ? "○ TURN MUTED" : devices.microphone ? "● MIC ON" : "○ MIC OFF"}</b></div>
             </article>
-            <article className={`video-tile video-tile--remote ${round?.active_player_id === opponentPlayer ? "video-tile--active" : ""}`}>
+            <article className={`video-tile video-tile--remote ${round?.active_player_id === opponentPlayer ? "video-tile--active" : ""} ${switchFeedbackVisible ? "video-tile--switched" : ""}`}>
               <video ref={remoteVideoRef} autoPlay playsInline className={hasRemoteVideo ? "" : "video-tile__hidden"} />
               {!hasRemoteVideo && <div className="video-placeholder"><b>{opponentName}</b><span>{connectionState === "waiting" ? "WAITING FOR OPPONENT MEDIA" : "LIVEKIT VIDEO CONNECTING"}</span></div>}
+              {switchFeedbackVisible && <div key={`${switchFeedback.eventId}-remote`} className="switch-feedback" aria-hidden="true"><b>SWITCHED!</b></div>}
               <div className="video-tile__label"><span>{opponentName} · PLAYER {opponentPlayer}</span><b className="video-tile__waiting">{hasRemoteVideo ? "● CONNECTED" : "⌁ CONNECTING"}</b></div>
             </article>
             {connectionState === "countdown" && <div className="countdown-overlay" aria-live="assertive"><span>ROUND 1</span><b>{countdown || "GO!"}</b><small>THE SCENE STARTS NOW</small></div>}
