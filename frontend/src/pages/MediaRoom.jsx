@@ -64,21 +64,18 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
   const isInRound = connectionState === "countdown" || connectionState === "active";
   const ownRole = scenario?.[localPlayer === "A" ? "player_a_role" : "player_b_role"];
 
-  // The broadcaster reaches both clients, while the acknowledgement provides
-  // an immediate fallback for the person who pressed Switch. Keep the visual
-  // derived from the authoritative target rather than the local actor.
+  // A switch is a match-wide moment. Every client renders its own impact from
+  // the authoritative event; player targeting remains server-side gameplay
+  // data and is not a prerequisite for the visual feedback.
   const showSwitchImpact = useCallback((event) => {
-    const targetPlayer = event?.target_player_id;
-    if (!targetPlayer) return;
+    if (!event?.id) return;
     window.clearTimeout(switchFeedbackTimerRef.current);
-    setSwitchFeedback({ eventId: event.id, targetPlayer });
+    setSwitchFeedback({ eventId: event.id });
     switchFeedbackTimerRef.current = window.setTimeout(() => setSwitchFeedback(null), 1800);
-    if (targetPlayer === localPlayer) {
-      setPartialTranscript("");
-      setTranscriptionStatus("Switch received — starting your replacement response…");
-      setCaptureCycle((current) => current + 1);
-    }
-  }, [localPlayer]);
+    setPartialTranscript("");
+    setTranscriptionStatus("Switch triggered — the scene is changing…");
+    setCaptureCycle((current) => current + 1);
+  }, []);
 
   const detachMedia = () => {
     const room = roomRef.current;
@@ -384,8 +381,7 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
 
   const timerLabel = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}`;
   const resultFor = (player) => player === "A" ? results?.player_a : results?.player_b;
-  const localPlayerWasSwitched = switchFeedback?.targetPlayer === localPlayer;
-  const opponentWasSwitched = switchFeedback?.targetPlayer === opponentPlayer;
+  const switchFeedbackVisible = Boolean(switchFeedback);
 
   return (
     <main className="media-page">
@@ -427,16 +423,15 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
           )}
 
           <div className={`video-grid ${isInRound ? "game-video-grid" : ""}`}>
-            <article className={`video-tile video-tile--local ${round?.active_player_id === localPlayer ? "video-tile--active" : ""} ${localPlayerWasSwitched ? "video-tile--switched" : ""}`}>
+            <article className={`video-tile video-tile--local ${round?.active_player_id === localPlayer ? "video-tile--active" : ""} ${switchFeedbackVisible ? "video-tile--switched" : ""}`}>
               <video ref={localVideoRef} autoPlay muted playsInline className={hasLocalVideo ? "" : "video-tile__hidden"} />
               {!hasLocalVideo && <div className="video-placeholder"><b>YOU</b><span>{connectionState === "connecting" ? "CONNECTING CAMERA…" : "CAMERA PREVIEW"}</span></div>}
-              {localPlayerWasSwitched && <div key={switchFeedback.eventId} className="switch-feedback" role="status" aria-live="assertive"><b>SWITCHED!</b></div>}
+              {switchFeedbackVisible && <div key={switchFeedback.eventId} className="switch-feedback" role="status" aria-live="assertive"><b>SWITCHED!</b></div>}
               <div className="video-tile__label"><span>YOU · PLAYER {localPlayer}</span><b>{isInRound && round?.active_player_id !== localPlayer ? "○ TURN MUTED" : devices.microphone ? "● MIC ON" : "○ MIC OFF"}</b></div>
             </article>
-            <article className={`video-tile video-tile--remote ${round?.active_player_id === opponentPlayer ? "video-tile--active" : ""} ${opponentWasSwitched ? "video-tile--switched" : ""}`}>
+            <article className={`video-tile video-tile--remote ${round?.active_player_id === opponentPlayer ? "video-tile--active" : ""}`}>
               <video ref={remoteVideoRef} autoPlay playsInline className={hasRemoteVideo ? "" : "video-tile__hidden"} />
               {!hasRemoteVideo && <div className="video-placeholder"><b>{opponentName}</b><span>{connectionState === "waiting" ? "WAITING FOR OPPONENT MEDIA" : "LIVEKIT VIDEO CONNECTING"}</span></div>}
-              {opponentWasSwitched && <div key={switchFeedback.eventId} className="switch-feedback" role="status" aria-live="assertive"><b>SWITCHED!</b></div>}
               <div className="video-tile__label"><span>{opponentName} · PLAYER {opponentPlayer}</span><b className="video-tile__waiting">{hasRemoteVideo ? "● CONNECTED" : "⌁ CONNECTING"}</b></div>
             </article>
             {connectionState === "countdown" && <div className="countdown-overlay" aria-live="assertive"><span>ROUND 1</span><b>{countdown || "GO!"}</b><small>THE SCENE STARTS NOW</small></div>}
