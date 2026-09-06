@@ -49,11 +49,15 @@ def register_matchmaking_handlers(
             _emit_match_found(service, match)
             return {"ok": True, "status": status, "match_id": str(match.match_id)}
         except (MatchmakingError, ValueError) as error:
-            _emit_error("INVALID_PAYLOAD", str(error))
-            return {"ok": False}
+            error_payload = match_error_payload("INVALID_PAYLOAD", str(error))
+            _emit_error(**error_payload)
+            return {"ok": False, "error": error_payload}
         except StorageUnavailableError:
-            _emit_error("STORAGE_UNAVAILABLE", "Matchmaking is temporarily unavailable")
-            return {"ok": False}
+            error_payload = match_error_payload(
+                "STORAGE_UNAVAILABLE", "Matchmaking is temporarily unavailable"
+            )
+            _emit_error(**error_payload)
+            return {"ok": False, "error": error_payload}
 
     @socketio.on("queue:leave")
     def leave_queue(payload: dict | None) -> dict:

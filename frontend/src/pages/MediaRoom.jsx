@@ -40,6 +40,7 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
   const roomRef = useRef(null);
   const captureRef = useRef(null);
   const switchFeedbackTimerRef = useRef(null);
+  const handledSwitchEventIdsRef = useRef(new Set());
   const [connectionState, setConnectionState] = useState("setup");
   const [errorMessage, setErrorMessage] = useState("");
   const [devices, setDevices] = useState({ camera: false, microphone: false });
@@ -64,18 +65,26 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
   const isInRound = connectionState === "countdown" || connectionState === "active";
   const ownRole = scenario?.[localPlayer === "A" ? "player_a_role" : "player_b_role"];
 
-  // A switch is a match-wide moment. Every client renders its own impact from
-  // the authoritative event; player targeting remains server-side gameplay
-  // data and is not a prerequisite for the visual feedback.
+  // A Switch is match-wide for presentation, but only the interrupted speaker
+  // must restart its transcription capture. The same event can arrive through
+  // the acknowledgement, Socket.IO broadcast, and transcript fallback, so it
+  // must be processed only once per client.
   const showSwitchImpact = useCallback((event) => {
     if (!event?.id) return;
+    if (handledSwitchEventIdsRef.current.has(event.id)) return;
+    handledSwitchEventIdsRef.current.add(event.id);
+    if (handledSwitchEventIdsRef.current.size > 100) {
+      handledSwitchEventIdsRef.current.delete(handledSwitchEventIdsRef.current.values().next().value);
+    }
     window.clearTimeout(switchFeedbackTimerRef.current);
     setSwitchFeedback({ eventId: event.id });
     switchFeedbackTimerRef.current = window.setTimeout(() => setSwitchFeedback(null), 1800);
-    setPartialTranscript("");
-    setTranscriptionStatus("Switch triggered — the scene is changing…");
-    setCaptureCycle((current) => current + 1);
-  }, []);
+    if (event.target_player_id === localPlayer) {
+      setPartialTranscript("");
+      setTranscriptionStatus("Switch received — starting your replacement response…");
+      setCaptureCycle((current) => current + 1);
+    }
+  }, [localPlayer]);
 
   const detachMedia = () => {
     const room = roomRef.current;

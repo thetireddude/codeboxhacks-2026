@@ -204,7 +204,7 @@ export function HomePage() {
         window.localStorage.setItem("improv-faceoff:guest-id", guestIdRef.current);
         socket.emit("queue:join", { guest_id: guestIdRef.current }, (joined) => {
           if (!joined?.ok) {
-            setNotice("Could not join the public queue.");
+            setNotice(joined?.error?.message ?? "Could not join the public queue.");
             setQueueState("error");
           }
         });

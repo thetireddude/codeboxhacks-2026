@@ -76,7 +76,13 @@ def test_queue_rejects_guest_identity_from_a_different_socket():
         "queue:join", {"guest_id": guest["guest_id"]}, callback=True
     )
 
-    assert response == {"ok": False}
+    assert response == {
+        "ok": False,
+        "error": {
+            "code": "INVALID_PAYLOAD",
+            "message": "Guest is not connected from this socket",
+        },
+    }
     error = intruder.get_received()[-1]
     assert error["name"] == "match:error"
     assert error["args"][0]["code"] == "INVALID_PAYLOAD"
