@@ -82,6 +82,13 @@ return { 'waiting' }
             raise StorageUnavailableError("Redis is unavailable") from error
         return self.get_match(UUID(match_id)) if match_id else None
 
+    def release_guest_match(self, guest_id: UUID) -> None:
+        """Remove a departed guest's active-match index so they may requeue."""
+        try:
+            self._client.delete(f"{self._guest_match_prefix()}{guest_id}")
+        except RedisError as error:
+            raise StorageUnavailableError("Redis is unavailable") from error
+
     def claim_queue_slot(
         self, guest_id: UUID, match_id: UUID
     ) -> tuple[str, UUID | None]:
@@ -183,6 +190,10 @@ class InMemoryRedisService:
     def get_match_for_guest(self, guest_id: UUID) -> MatchState | None:
         match_id = self._guest_matches.get(guest_id)
         return self._matches.get(match_id) if match_id else None
+
+    def release_guest_match(self, guest_id: UUID) -> None:
+        with self._lock:
+            self._guest_matches.pop(guest_id, None)
 
     def claim_queue_slot(
         self, guest_id: UUID, match_id: UUID

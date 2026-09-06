@@ -95,3 +95,24 @@ def test_guest_identity_can_reconnect_after_its_socket_disconnects():
 
     assert response["ok"] is True
     assert response["guest"]["guest_id"] == guest["guest_id"]
+
+
+def test_disconnected_matched_guest_can_rejoin_the_public_queue():
+    app = create_app(TestConfig)
+    first_client = socketio.test_client(app)
+    second_client = socketio.test_client(app)
+    first_guest = _new_guest(first_client)
+    second_guest = _new_guest(second_client)
+
+    first_client.emit("queue:join", {"guest_id": first_guest["guest_id"]}, callback=True)
+    second_client.emit("queue:join", {"guest_id": second_guest["guest_id"]}, callback=True)
+    first_client.disconnect()
+
+    reconnecting_client = socketio.test_client(app)
+    restored = reconnecting_client.emit(
+        "guest:create", {"guest_id": first_guest["guest_id"]}, callback=True
+    )
+    assert restored["ok"] is True
+    assert reconnecting_client.emit(
+        "queue:join", {"guest_id": first_guest["guest_id"]}, callback=True
+    ) == {"ok": True, "status": "waiting"}

@@ -79,6 +79,10 @@ class MatchmakingService:
                 )
             )
 
+    def release_guest_match(self, guest_id: UUID) -> None:
+        """Make a departed guest eligible for a future public match."""
+        self._storage.release_guest_match(guest_id)
+
     def _require_owned_guest(self, guest_id: UUID, socket_id: str) -> Guest:
         guest = self._storage.get_guest(guest_id)
         if guest is None or guest.socket_id != socket_id:

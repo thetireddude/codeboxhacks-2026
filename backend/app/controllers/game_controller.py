@@ -146,6 +146,7 @@ def register_game_handlers(
             guest_id = UUID(guest_id_text)
             match = matchmaking_service.get_match_for_guest(guest_id)
             matchmaking_service.disconnect_guest(guest_id, request.sid)
+            matchmaking_service.release_guest_match(guest_id)
             if match is None:
                 return
             match = game_service.disconnect_player(match.match_id, guest_id)
