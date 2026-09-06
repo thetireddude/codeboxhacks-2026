@@ -3,7 +3,11 @@ from uuid import UUID
 
 from app import create_app, socketio
 from app.config import AppConfig
-from app.services.transcription_service import TranscriptionSession
+from app.services.transcription_service import (
+    DeepgramSession,
+    TranscriptionCallbacks,
+    TranscriptionSession,
+)
 
 
 class FakeSession(TranscriptionSession):
@@ -266,3 +270,54 @@ def test_switch_rejects_live_partial_then_resets_stt_for_replacement_speech():
         UUID(first_guest["guest_id"])
     )
     assert response["event"]["id"] in match.switch_response_latencies
+
+
+def test_force_end_turn_discards_the_rejected_turn_before_starting_replacement():
+    events = []
+
+    class Connection:
+        forced_turn_ends = 0
+
+        def send_force_end_turn(self):
+            self.forced_turn_ends += 1
+
+    session = DeepgramSession(
+        api_key="test-key",
+        model="flux-general-en",
+        sample_rate=16000,
+        turn_end_silence_ms=500,
+        switch_response_min_ms=0,
+        callbacks=TranscriptionCallbacks(
+            on_started=lambda speech_id: events.append(("started", speech_id, "")),
+            on_partial=lambda speech_id, text: events.append(
+                ("partial", speech_id, text)
+            ),
+            on_final=lambda speech_id, text: events.append(("final", speech_id, text)),
+            on_error=lambda _code, _message: None,
+        ),
+    )
+    connection = Connection()
+    session._connection = connection
+
+    session._handle_message(
+        type("Message", (), {"event": "StartOfTurn", "transcript": ""})()
+    )
+    session._handle_message(
+        type("Message", (), {"event": "Update", "transcript": "old response"})()
+    )
+    old_speech_id = events[-1][1]
+    session.interrupt()
+    session._handle_message(
+        type("Message", (), {"event": "EndOfTurn", "transcript": "old response"})()
+    )
+    session._handle_message(
+        type("Message", (), {"event": "StartOfTurn", "transcript": ""})()
+    )
+    session._handle_message(
+        type("Message", (), {"event": "Update", "transcript": "new response"})()
+    )
+
+    assert connection.forced_turn_ends == 1
+    assert ("final", old_speech_id, "old response") not in events
+    assert events[-1] == ("partial", events[-1][1], "new response")
+    assert events[-1][1] != old_speech_id

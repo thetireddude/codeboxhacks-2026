@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from queue import Empty, Full, Queue
 from threading import Lock, Thread
+from time import monotonic
 from uuid import uuid4
 
 from app.models.transcript import PlayerSlot
@@ -52,17 +53,21 @@ class DeepgramSession(TranscriptionSession):
         model: str,
         sample_rate: int,
         turn_end_silence_ms: int,
+        switch_response_min_ms: int,
         callbacks: TranscriptionCallbacks,
     ) -> None:
         self._api_key = api_key
         self._model = model
         self._sample_rate = sample_rate
         self._turn_end_silence_ms = turn_end_silence_ms
+        self._switch_response_min_ms = switch_response_min_ms
         self._callbacks = callbacks
         self._connection = None
         self._lock = Lock()
         self._pending_audio: Queue[bytes] = Queue(maxsize=50)
         self._speech_id: str | None = None
+        self._switch_guard_ends_at = 0.0
+        self._discard_interrupted_turn = False
 
     def start(self) -> None:
         if not self._api_key:
@@ -92,7 +97,21 @@ class DeepgramSession(TranscriptionSession):
             connection.send_close_stream()
 
     def interrupt(self) -> None:
-        self._speech_id = None
+        with self._lock:
+            connection = self._connection
+            self._speech_id = None
+            # Flux sends an EndOfTurn for ForceEndTurn. It belongs to the
+            # rejected response and must never become the replacement speech.
+            self._discard_interrupted_turn = True
+            self._switch_guard_ends_at = monotonic() + (
+                self._switch_response_min_ms / 1000
+            )
+        if connection is not None:
+            try:
+                connection.send_force_end_turn()
+            except Exception:
+                # The local guard remains a safe fallback while reconnecting.
+                pass
 
     def _run(self) -> None:
         try:
@@ -128,14 +147,30 @@ class DeepgramSession(TranscriptionSession):
     def _handle_message(self, message) -> None:
         event = getattr(message, "event", None)
         transcript = (getattr(message, "transcript", None) or "").strip()
+        if self._discard_interrupted_turn and event in ("Update", "EndOfTurn"):
+            if event == "EndOfTurn":
+                self._speech_id = None
+                self._discard_interrupted_turn = False
+            return
         if event == "StartOfTurn":
+            # A new provider turn is the authoritative boundary after Switch.
+            self._discard_interrupted_turn = False
             self._begin_speech()
-        elif event == "Update" and transcript:
+            return
+        if event in ("Update", "EndOfTurn") and self._switch_guard_is_active():
+            if event == "EndOfTurn":
+                self._speech_id = None
+            return
+        if event == "Update" and transcript:
             self._callbacks.on_partial(self._begin_speech(), transcript)
         elif event == "EndOfTurn" and transcript:
             speech_id = self._begin_speech()
             self._callbacks.on_final(speech_id, transcript)
             self._speech_id = None
+
+    def _switch_guard_is_active(self) -> bool:
+        with self._lock:
+            return monotonic() < self._switch_guard_ends_at
 
     def _send_pending_audio(self, connection) -> None:
         while True:
@@ -162,6 +197,7 @@ class TranscriptionService:
         sample_rate: int,
         chunk_ms: int,
         turn_end_silence_ms: int,
+        switch_response_min_ms: int,
         session_factory: Callable[..., TranscriptionSession] | None = None,
     ) -> None:
         self._api_key = api_key
@@ -170,6 +206,7 @@ class TranscriptionService:
         self._chunk_ms = chunk_ms
         self._max_chunk_bytes = sample_rate * 2 * chunk_ms // 1000
         self._turn_end_silence_ms = turn_end_silence_ms
+        self._switch_response_min_ms = switch_response_min_ms
         self._session_factory = session_factory or DeepgramSession
         self._sessions: dict[str, TranscriptionSession] = {}
 
@@ -197,6 +234,7 @@ class TranscriptionService:
             model=self._model,
             sample_rate=self._sample_rate,
             turn_end_silence_ms=self._turn_end_silence_ms,
+            switch_response_min_ms=self._switch_response_min_ms,
             callbacks=callbacks,
         )
         start = getattr(session, "start", None)
@@ -240,5 +278,6 @@ def create_transcription_service(config) -> TranscriptionService:
         sample_rate=config["STT_SAMPLE_RATE"],
         chunk_ms=config["STT_CHUNK_MS"],
         turn_end_silence_ms=config["TURN_END_SILENCE_MS"],
+        switch_response_min_ms=config["SWITCH_RESPONSE_MIN_MS"],
         session_factory=config["TRANSCRIPTION_SESSION_FACTORY"],
     )
