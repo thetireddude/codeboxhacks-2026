@@ -14,9 +14,11 @@
     "@livekit/components-react": "2.6.10",
     "framer-motion": "^11.11.17",
     "livekit-client": "2.5.10",
+    "prop-types": "^15.8.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "7.18.3",
+    "recharts": "^3.10.1",
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
