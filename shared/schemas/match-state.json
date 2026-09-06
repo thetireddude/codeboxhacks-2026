@@ -14,6 +14,7 @@
     "round_started_at",
     "active_player_id",
     "switches_remaining",
+    "switch_response_latencies",
     "transcript_events"
   ],
   "properties": {
@@ -67,6 +68,16 @@
         "A": { "type": "integer", "minimum": 0, "maximum": 5 },
         "B": { "type": "integer", "minimum": 0, "maximum": 5 }
       }
+    },
+    "switch_response_latencies": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "integer", "minimum": 0 },
+          { "type": "null" }
+        ]
+      },
+      "propertyNames": { "pattern": "^switch_[A-Za-z0-9_-]+$" }
     },
     "transcript_events": {
       "type": "array",

@@ -12,6 +12,7 @@ from app.models import (
     MatchStatus,
     PlayerSlot,
     Scenario,
+    SpeechEvent,
     SwitchEvent,
 )
 
@@ -111,10 +112,126 @@ class GameService:
             self._storage.save_match(match)
             return match
 
+    def begin_speech(self, match_id: UUID, guest_id: UUID) -> tuple[PlayerSlot, int]:
+        """Validate the authoritative speaker and capture a round-relative start."""
+        with self._lock:
+            match = self._require_active_speaker(match_id, guest_id)
+            return match.active_player_id, min(
+                self._elapsed_ms(match), self._round_duration_ms
+            )
+
+    def finalize_speech(
+        self,
+        match_id: UUID,
+        guest_id: UUID,
+        speech_id: str,
+        text: str,
+        start_ms: int,
+        *,
+        truncated_by_round_end: bool = False,
+    ) -> tuple[MatchState, SpeechEvent]:
+        """Persist an accepted speech line and advance to the next player."""
+        cleaned_text = text.strip()
+        if not cleaned_text:
+            raise GameStateError("Speech text cannot be empty")
+        with self._lock:
+            match = self._require_active_speaker(match_id, guest_id)
+            end_ms = (
+                self._round_duration_ms
+                if truncated_by_round_end
+                else min(
+                    self._round_duration_ms,
+                    max(start_ms, self._elapsed_ms(match)),
+                )
+            )
+            event = SpeechEvent(
+                type="speech",
+                id=speech_id,
+                player_id=match.active_player_id,
+                text=cleaned_text,
+                start_ms=start_ms,
+                end_ms=end_ms,
+                is_final=True,
+                accepted=True,
+                truncated_by_switch=False,
+                truncated_by_round_end=truncated_by_round_end,
+            )
+            next_player: PlayerSlot = (
+                match.active_player_id
+                if truncated_by_round_end
+                else "B" if match.active_player_id == "A" else "A"
+            )
+            match = match.model_copy(
+                update={
+                    "active_player_id": next_player,
+                    "transcript_events": [*match.transcript_events, event],
+                }
+            )
+            self._storage.save_match(match)
+            return match, event
+
+    def record_switch_response(
+        self, match_id: UUID, guest_id: UUID, speech_start_ms: int
+    ) -> MatchState:
+        """Persist latency for the latest pending Switch and supersede older ones."""
+        with self._lock:
+            match = self._require_active_speaker(match_id, guest_id)
+            latencies = dict(match.switch_response_latencies)
+            pending = [
+                event
+                for event in match.transcript_events
+                if (
+                    event.type == "switch"
+                    and event.target_player_id == match.active_player_id
+                    and event.id not in latencies
+                    and event.timestamp_ms <= speech_start_ms
+                )
+            ]
+            for event in pending[:-1]:
+                latencies[event.id] = None
+            if pending:
+                latest = pending[-1]
+                latencies[latest.id] = speech_start_ms - latest.timestamp_ms
+            if latencies == match.switch_response_latencies:
+                return match
+            match = match.model_copy(update={"switch_response_latencies": latencies})
+            self._storage.save_match(match)
+            return match
+
     def press_switch(
         self, match_id: UUID, guest_id: UUID, request_id: str
     ) -> tuple[MatchState, SwitchEvent, bool]:
         """Apply a listener Switch and return whether it was previously accepted."""
+        match, event, is_replay, _ = self._apply_switch(
+            match_id, guest_id, request_id
+        )
+        return match, event, is_replay
+
+    def press_switch_with_interruption(
+        self,
+        match_id: UUID,
+        guest_id: UUID,
+        request_id: str,
+        *,
+        speech_id: str | None,
+        text: str | None,
+        start_ms: int | None,
+    ) -> tuple[MatchState, SwitchEvent, bool, SpeechEvent | None]:
+        """Apply a Switch and atomically place an interrupted speech before it."""
+        interrupted = None
+        if speech_id is not None and text is not None and start_ms is not None:
+            cleaned_text = text.strip()
+            if cleaned_text:
+                interrupted = (speech_id, cleaned_text, start_ms)
+        return self._apply_switch(match_id, guest_id, request_id, interrupted)
+
+    def _apply_switch(
+        self,
+        match_id: UUID,
+        guest_id: UUID,
+        request_id: str,
+        interrupted: tuple[str, str, int] | None = None,
+    ) -> tuple[MatchState, SwitchEvent, bool, SpeechEvent | None]:
         if not isinstance(request_id, str) or not request_id.strip():
             raise SwitchRejectedError("INVALID_PAYLOAD", "request_id is required")
 
@@ -129,7 +246,7 @@ class GameService:
                         "DUPLICATE_REQUEST",
                         "request_id was already used by the other player",
                     )
-                return match, existing_event, True
+                return match, existing_event, True, None
 
             if match.state != MatchStatus.ROUND_ACTIVE:
                 raise SwitchRejectedError("ROUND_NOT_ACTIVE", "Round is not active")
@@ -144,12 +261,29 @@ class GameService:
             if remaining < 1:
                 raise SwitchRejectedError("NO_SWITCHES_REMAINING", "No Switches remain")
 
+            timestamp_ms = min(self._elapsed_ms(match), self._round_duration_ms)
+            interrupted_event = None
+            if interrupted is not None:
+                speech_id, text, start_ms = interrupted
+                interrupted_event = SpeechEvent(
+                    type="speech",
+                    id=speech_id,
+                    player_id=match.active_player_id,
+                    text=text,
+                    start_ms=start_ms,
+                    end_ms=max(start_ms, timestamp_ms),
+                    is_final=True,
+                    accepted=False,
+                    truncated_by_switch=True,
+                    truncated_by_round_end=False,
+                )
+
             event = SwitchEvent(
                 type="switch",
                 id=f"switch_{uuid4().hex}",
                 from_player_id=switching_player,
                 target_player_id=match.active_player_id,
-                timestamp_ms=self._elapsed_ms(match),
+                timestamp_ms=timestamp_ms,
             )
             inventory = match.switches_remaining.model_copy(
                 update={switching_player: remaining - 1}
@@ -157,12 +291,16 @@ class GameService:
             match = match.model_copy(
                 update={
                     "switches_remaining": inventory,
-                    "transcript_events": [*match.transcript_events, event],
+                    "transcript_events": [
+                        *match.transcript_events,
+                        *([interrupted_event] if interrupted_event else []),
+                        event,
+                    ],
                 }
             )
             self._storage.save_match(match)
             self._storage.save_switch_request(match_id, request_id, event)
-            return match, event, False
+            return match, event, False, interrupted_event
 
     def append_transcript_event(
         self, match_id: UUID, guest_id: UUID, event
@@ -245,6 +383,14 @@ class GameService:
         match = self._storage.get_match(match_id)
         if match is None:
             raise GameStateError("Match was not found")
+        return match
+
+    def _require_active_speaker(self, match_id: UUID, guest_id: UUID) -> MatchState:
+        match = self._require_match(match_id)
+        if match.state != MatchStatus.ROUND_ACTIVE:
+            raise GameStateError("Round is not active")
+        if guest_id != self._guest_for_slot(match, match.active_player_id):
+            raise GameStateError("Only the active speaker can provide speech")
         return match
 
     @staticmethod

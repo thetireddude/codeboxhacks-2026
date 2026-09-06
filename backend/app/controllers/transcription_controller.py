@@ -2,25 +2,26 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from flask import request
 
 from app import socketio
-from app.models import SpeechEvent
 from app.services.game_service import GameService, GameStateError
 from app.services.matchmaking_service import MatchmakingService
+from app.services.transcript_service import TranscriptService
 from app.services.transcription_service import (
     TranscriptionCallbacks,
     TranscriptionError,
     TranscriptionService,
 )
-from app.views.socket_views import transcript_event_payload, turn_changed_payload
 
 
 def register_transcription_handlers(
     service: TranscriptionService,
-    game_service: GameService | None = None,
-    matchmaking_service: MatchmakingService | None = None,
-    socket_guests: dict[str, str] | None = None,
+    transcript_service: TranscriptService,
+    game_service: GameService,
+    matchmaking_service: MatchmakingService,
 ) -> None:
     @socketio.on("transcription:start")
     def start_transcription(payload: dict | None) -> dict:
@@ -28,21 +29,21 @@ def register_transcription_handlers(
         if player_id not in ("A", "B"):
             return _error("INVALID_PAYLOAD", "player_id must be A or B")
         try:
-            match_context = _match_context(
-                payload, player_id, matchmaking_service, socket_guests
-            )
+            context = _authoritative_context(payload, game_service, matchmaking_service)
+            if context is not None:
+                match_id, guest_id, player_id = context
             service.start_stream(
                 request.sid,
                 player_id,
                 _callbacks(
                     request.sid,
                     player_id,
-                    game_service,
+                    context,
+                    transcript_service,
                     matchmaking_service,
-                    match_context,
                 ),
             )
-        except (TranscriptionError, GameStateError, ValueError) as error:
+        except (GameStateError, TranscriptionError, ValueError) as error:
             return _error("STT_UNAVAILABLE", str(error))
         return {
             "ok": True,
@@ -63,110 +64,125 @@ def register_transcription_handlers(
     def stop_transcription() -> dict:
         return {"ok": True, "stopped": service.stop_stream(request.sid)}
 
+    @socketio.on("transcription:interrupt")
+    def interrupt_transcription() -> dict:
+        """Debug mic-check boundary; matches the production Switch interrupt."""
+        interrupted = service.interrupt_stream(request.sid)
+        if not interrupted:
+            return _error("STT_UNAVAILABLE", "No transcription stream is active")
+        return {"ok": True, "interrupted": True}
+
 
 def _callbacks(
     socket_id: str,
     player_id: str,
-    game_service: GameService | None,
-    matchmaking_service: MatchmakingService | None,
-    match_context: tuple | None,
+    context: tuple[UUID, UUID, str] | None,
+    transcript_service: TranscriptService,
+    matchmaking_service: MatchmakingService,
 ) -> TranscriptionCallbacks:
-    start_ms: int | None = None
-
-    def on_started(speech_id: str) -> None:
-        nonlocal start_ms
-        start_ms = (
-            game_service.elapsed_ms(match_context[0])
-            if game_service and match_context
-            else 0
-        )
+    def started(speech_id: str) -> None:
+        if context is not None:
+            try:
+                transcript_service.speech_started(context[0], context[1], speech_id)
+            except GameStateError as error:
+                _emit_transcription_error(socket_id, "ROUND_NOT_ACTIVE", str(error))
+                return
         socketio.emit(
             "speech:started",
             {"player_id": player_id, "speech_id": speech_id},
             to=socket_id,
         )
 
-    def on_final(speech_id: str, text: str) -> None:
+    def final(speech_id: str, text: str) -> None:
+        if context is None:
+            socketio.emit(
+                "speech:final",
+                {"player_id": player_id, "speech_id": speech_id, "text": text},
+                to=socket_id,
+            )
+            return
+        try:
+            match, event = transcript_service.speech_final(speech_id, text)
+        except GameStateError as error:
+            _emit_transcription_error(socket_id, "ROUND_NOT_ACTIVE", str(error))
+            return
         socketio.emit(
             "speech:final",
             {"player_id": player_id, "speech_id": speech_id, "text": text},
             to=socket_id,
         )
-        if not game_service or not matchmaking_service or not match_context:
-            return
-        match_id, guest_id = match_context
-        try:
-            event = SpeechEvent(
-                type="speech",
-                id=speech_id,
-                player_id=player_id,
-                text=text,
-                start_ms=start_ms or game_service.elapsed_ms(match_id),
-                end_ms=game_service.elapsed_ms(match_id),
-                is_final=True,
-                accepted=True,
-                truncated_by_switch=False,
-                truncated_by_round_end=False,
-            )
-            match = game_service.append_transcript_event(match_id, guest_id, event)
-            _emit_to_match(
-                matchmaking_service,
-                match,
-                "transcript:event",
-                transcript_event_payload(match, event),
-            )
-            match = game_service.complete_turn(match_id, guest_id)
-            _emit_to_match(
-                matchmaking_service,
-                match,
-                "turn:changed",
-                turn_changed_payload(match, game_service.elapsed_ms(match_id)),
-            )
-        except GameStateError as error:
-            socketio.emit(
-                "transcription:error",
-                {"code": "TRANSCRIPT_REJECTED", "message": str(error)},
-                to=socket_id,
-            )
+        for guest_id in (match.player_a_id, match.player_b_id):
+            guest = matchmaking_service.get_guest(guest_id)
+            if guest and guest.socket_id:
+                socketio.emit(
+                    "transcript:event",
+                    {
+                        "match_id": str(match.match_id),
+                        "event": event.model_dump(mode="json"),
+                    },
+                    to=guest.socket_id,
+                )
+                socketio.emit(
+                    "turn:changed",
+                    {
+                        "match_id": str(match.match_id),
+                        "active_player_id": match.active_player_id,
+                        "timestamp_ms": event.end_ms,
+                    },
+                    to=guest.socket_id,
+                )
 
-    return TranscriptionCallbacks(
-        on_started=on_started,
-        on_partial=lambda speech_id, text: socketio.emit(
+    def partial(speech_id: str, text: str) -> None:
+        if context is not None:
+            try:
+                transcript_service.speech_partial(speech_id, text)
+            except GameStateError as error:
+                _emit_transcription_error(socket_id, "ROUND_NOT_ACTIVE", str(error))
+                return
+        socketio.emit(
             "speech:partial",
             {"player_id": player_id, "speech_id": speech_id, "text": text},
             to=socket_id,
-        ),
-        on_final=on_final,
+        )
+
+    return TranscriptionCallbacks(
+        on_started=started,
+        on_partial=partial,
+        on_final=final,
         on_error=lambda code, message: socketio.emit(
             "transcription:error", {"code": code, "message": message}, to=socket_id
+        ),
+        on_ready=lambda: socketio.emit(
+            "speech:ready", {"player_id": player_id}, to=socket_id
         ),
     )
 
 
-def _match_context(payload, player_id, matchmaking_service, socket_guests):
-    match_id_text = (payload or {}).get("match_id")
-    if not match_id_text:
+def _authoritative_context(
+    payload: dict | None,
+    game_service: GameService,
+    matchmaking_service: MatchmakingService,
+) -> tuple[UUID, UUID, str] | None:
+    if not isinstance(payload, dict) or not payload.get("match_id"):
         return None
-    if matchmaking_service is None or socket_guests is None:
-        raise ValueError("Match transcription is unavailable")
-    from uuid import UUID
-
-    guest_id = UUID(socket_guests[request.sid])
-    match_id = UUID(str(match_id_text))
+    if not payload.get("guest_id"):
+        raise ValueError("guest_id is required when match_id is provided")
+    match_id = UUID(str(payload["match_id"]))
+    guest_id = UUID(str(payload["guest_id"]))
+    guest = matchmaking_service.get_guest(guest_id)
+    if guest is None or guest.socket_id != request.sid:
+        raise ValueError("Guest is not connected from this socket")
     match = matchmaking_service.get_match_for_guest(guest_id)
     if match is None or match.match_id != match_id:
         raise ValueError("Guest is not in this match")
-    slot = "A" if match.player_a_id == guest_id else "B"
-    if player_id != slot:
-        raise ValueError("player_id does not match this guest")
-    return match_id, guest_id
+    player_id, _ = game_service.begin_speech(match_id, guest_id)
+    return match_id, guest_id, player_id
 
 
-def _emit_to_match(matchmaking_service, match, event: str, payload: dict) -> None:
-    for guest_id in (match.player_a_id, match.player_b_id):
-        guest = matchmaking_service.get_guest(guest_id)
-        if guest and guest.socket_id:
-            socketio.emit(event, payload, to=guest.socket_id)
+def _emit_transcription_error(socket_id: str, code: str, message: str) -> None:
+    socketio.emit(
+        "transcription:error", {"code": code, "message": message}, to=socket_id
+    )
 
 
 def _error(code: str, message: str) -> dict:

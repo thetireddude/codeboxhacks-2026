@@ -12,6 +12,8 @@ from app.services.game_service import GameService, GameStateError, SwitchRejecte
 from app.services.match_integration_service import MatchIntegrationService
 from app.services.matchmaking_service import MatchmakingService
 from app.services.redis_service import StorageUnavailableError
+from app.services.transcript_service import TranscriptService
+from app.services.transcription_service import TranscriptionService
 from app.views.socket_views import (
     match_error_payload,
     results_ready_payload,
@@ -31,7 +33,8 @@ def register_game_handlers(
     socket_guests: dict[str, str],
     countdown_duration_ms: int,
     integration_service: MatchIntegrationService,
-    on_switch=None,
+    transcript_service: TranscriptService | None = None,
+    transcription_service: TranscriptionService | None = None,
     cleanup_delay_ms: int = 300_000,
 ) -> None:
     @socketio.on("player:ready")
@@ -59,6 +62,7 @@ def register_game_handlers(
                     integration_service,
                     match_id,
                     countdown_duration_ms,
+                    transcript_service,
                     cleanup_delay_ms,
                 )
             return {"ok": True, "state": match.state.value}
@@ -99,10 +103,38 @@ def register_game_handlers(
                 payload, matchmaking_service, request.sid
             )
             request_id = _required_request_id(payload)
-            match, event, is_replay = game_service.press_switch(
-                match_id, guest_id, request_id
-            )
+            if transcript_service is None:
+                match, event, is_replay = game_service.press_switch(
+                    match_id, guest_id, request_id
+                )
+                interrupted = None
+            else:
+                match, event, is_replay, interrupted = transcript_service.press_switch(
+                    match_id, guest_id, request_id
+                )
             if not is_replay:
+                if interrupted is not None:
+                    _emit_to_match(
+                        matchmaking_service,
+                        match,
+                        "transcript:event",
+                        {
+                            "match_id": str(match.match_id),
+                            "event": interrupted.model_dump(mode="json"),
+                        },
+                    )
+                target_guest_id = (
+                    match.player_a_id
+                    if event.target_player_id == "A"
+                    else match.player_b_id
+                )
+                target_guest = matchmaking_service.get_guest(target_guest_id)
+                if (
+                    transcription_service is not None
+                    and target_guest is not None
+                    and target_guest.socket_id
+                ):
+                    transcription_service.interrupt_stream(target_guest.socket_id)
                 _emit_to_match(
                     matchmaking_service,
                     match,
@@ -115,8 +147,6 @@ def register_game_handlers(
                     "transcript:event",
                     transcript_event_payload(match, event),
                 )
-                if on_switch is not None:
-                    on_switch(match_id, event)
             return {
                 "ok": True,
                 "event": event.model_dump(mode="json"),
@@ -192,6 +222,7 @@ def _run_round(
     integration_service: MatchIntegrationService,
     match_id: UUID,
     countdown_duration_ms: int,
+    transcript_service: TranscriptService | None,
     cleanup_delay_ms: int,
 ) -> None:
     socketio.sleep(countdown_duration_ms / 1000)
@@ -204,7 +235,22 @@ def _run_round(
             round_start_payload(match, game_service.round_duration_ms),
         )
         socketio.sleep(game_service.round_duration_ms / 1000)
+        truncated_events = (
+            transcript_service.finalize_round(match_id)
+            if transcript_service is not None
+            else []
+        )
         match = game_service.end_round(match_id)
+        for event in truncated_events:
+            _emit_to_match(
+                matchmaking_service,
+                match,
+                "transcript:event",
+                {
+                    "match_id": str(match.match_id),
+                    "event": event.model_dump(mode="json"),
+                },
+            )
         _emit_to_match(
             matchmaking_service,
             match,

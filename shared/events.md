@@ -17,8 +17,7 @@ changing a required field is a breaking contract change.
 | `player:ready` | `{ match_id, guest_id }` | Confirm the client is ready. |
 | `switch:press` | `{ match_id, guest_id, request_id }` | Request a Switch; `request_id` supports idempotent handling. |
 | `turn:complete` | `{ match_id, guest_id }` | Development-only fake speech-end signal; the server validates ownership before changing turns. |
-| `media:credentials` | `{ match_id }` | Request the caller's LiveKit room credentials; the socket-bound guest identity is used. |
-| `transcription:start` | `{ player_id }` | Open a live PCM16 transcription stream for the mocked active player. |
+| `transcription:start` | `{ player_id, match_id?, guest_id? }` | Open a live PCM16 transcription stream. A real round includes `match_id` and `guest_id`; the backend verifies the active speaker and ignores the client-selected slot. |
 | `transcription:audio` | Binary PCM16 audio | Send one 16 kHz mono audio chunk (80 ms recommended). |
 | `transcription:stop` | None | Finish and close the caller's transcription stream. |
 

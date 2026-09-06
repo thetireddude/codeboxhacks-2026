@@ -16,6 +16,9 @@
     "A": 5,
     "B": 4
   },
+  "switch_response_latencies": {
+    "switch_001": 380
+  },
   "transcript_events": [
     {
       "type": "speech",
