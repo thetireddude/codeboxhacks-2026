@@ -48,6 +48,27 @@ The command prints one validated scenario as formatted JSON. It makes one live
 Gemini request and may retry once if Gemini returns an invalid response or a
 temporary error.
 
+### Enable live speech-to-text
+
+Create a free Deepgram account, generate an API key, and put it only in
+`backend/.env`:
+
+```env
+DEEPGRAM_API_KEY=your_key_here
+```
+
+The A2 stream accepts 16 kHz mono PCM16 audio over Socket.IO. It sends
+`speech:started`, `speech:partial`, and `speech:final` messages back to that
+socket. The browser must never receive the Deepgram key.
+
+The reusable browser capture function is
+`frontend/src/services/pcm16Capture.js`. It uses an AudioWorklet to resample a
+microphone to 16 kHz mono PCM16 and sends 80 ms chunks through Socket.IO.
+
+For a manual live check, run both applications and open
+<http://localhost:5173/stt-test>. This diagnostic page is separate from the
+game UI and displays Deepgram's partial and final transcript messages.
+
 ### Contract validation
 
 From the repository root, after installing the backend requirements:
