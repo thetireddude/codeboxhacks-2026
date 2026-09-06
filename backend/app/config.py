@@ -67,8 +67,11 @@ class AppConfig:
     CHAIN_SWITCH_WINDOW_MS = _as_int("CHAIN_SWITCH_WINDOW_MS", 500)
 
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-    GEMINI_SCENARIO_MODEL = os.getenv("GEMINI_SCENARIO_MODEL", "gemini-3.1-flash-lite")
-    GEMINI_SCENARIO_MAX_ATTEMPTS = _as_int("GEMINI_SCENARIO_MAX_ATTEMPTS", 2)
+    GEMINI_SCENARIO_MODEL = os.getenv("GEMINI_SCENARIO_MODEL", "gemma-4-26b-a4b-it")
+    GEMINI_SCENARIO_MAX_ATTEMPTS = _as_int("GEMINI_SCENARIO_MAX_ATTEMPTS", 4)
+    SCENARIO_QUALITY_CHECK_ENABLED = os.getenv("SCENARIO_QUALITY_CHECK_ENABLED", "true").lower() == "true"
+    SCENARIO_MIN_COHERENCE_SCORE = _as_int("SCENARIO_MIN_COHERENCE_SCORE", 7)
+    SCENARIO_MIN_UNIQUENESS_SCORE = _as_int("SCENARIO_MIN_UNIQUENESS_SCORE", 8)
     # Roles must support a spoken, back-and-forth scene. Deployments can extend
     # this comma-separated list through SCENARIO_ROLE_BLACKLIST.
     SCENARIO_ROLE_BLACKLIST = _as_words(

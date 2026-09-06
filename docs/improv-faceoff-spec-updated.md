@@ -1940,8 +1940,13 @@ Checklist:
 Checklist:
 
 - Gemini service wrapper
+- Gemma 4 26B A4B scenario model with forced function-call parsing
 - scenario generation schema
 - random tone generation
+- deterministic 50/50 asymmetric-subject and collective-subject generation slots
+- two-active-player and asymmetric-role validation
+- coherence and first-generation uniqueness quality gates
+- structural rejection for inactive third-party tasks and collective object-is-alive-or-food prompts
 - judge input schema
 - Adaptability scoring
 - Creativity scoring
