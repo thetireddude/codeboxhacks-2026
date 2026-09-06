@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
+import "@fontsource/press-start-2p/400.css";
 
 import App from "./App.jsx";
 import "./styles.css";
