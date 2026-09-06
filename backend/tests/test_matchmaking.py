@@ -99,6 +99,20 @@ def test_cancelling_a_found_match_releases_both_players_for_an_immediate_retry()
     assert second_join["status"] == "paired"
 
 
+def test_duplicate_cancel_is_safe_after_a_lost_acknowledgement():
+    app = create_app(TestConfig)
+    first_client = socketio.test_client(app)
+    second_client = socketio.test_client(app)
+    first_guest = _new_guest(first_client)
+    second_guest = _new_guest(second_client)
+    first_client.emit("queue:join", {"guest_id": first_guest["guest_id"]}, callback=True)
+    paired = second_client.emit("queue:join", {"guest_id": second_guest["guest_id"]}, callback=True)
+
+    payload = {"guest_id": first_guest["guest_id"], "match_id": paired["match_id"]}
+    assert first_client.emit("match:cancel", payload, callback=True)["cancelled"] is True
+    assert first_client.emit("match:cancel", payload, callback=True) == {"ok": True, "cancelled": False}
+
+
 def test_queue_rejects_guest_identity_from_a_different_socket():
     app = create_app(TestConfig)
     owner = socketio.test_client(app)

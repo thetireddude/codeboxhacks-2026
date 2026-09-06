@@ -57,7 +57,7 @@ class AppConfig:
     MATCH_CLEANUP_DELAY_MS = _as_int("MATCH_CLEANUP_DELAY_MS", 300_000)
     # Preserve result reconnects briefly, but release both guests when neither
     # browser returns after a shared disconnect.
-    RESULT_DISCONNECT_GRACE_MS = _as_int("RESULT_DISCONNECT_GRACE_MS", 5_000)
+    RESULT_DISCONNECT_GRACE_MS = _as_int("RESULT_DISCONNECT_GRACE_MS", 0)
     STARTING_SWITCH_COUNT = _as_int("STARTING_SWITCH_COUNT", 5)
     # Give the listener a practical Switch window before STT ends the turn.
     # This stays configurable for playtesting; the spec recommends 700–1200 ms.

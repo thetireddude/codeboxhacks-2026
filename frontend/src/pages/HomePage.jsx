@@ -20,6 +20,8 @@ export function HomePage() {
   const [match, setMatch] = useState(null);
   const socketRef = useRef(null);
   const guestIdRef = useRef(window.localStorage.getItem("improv-faceoff:guest-id"));
+  const queueRequestRef = useRef(false);
+  const matchRef = useRef(null);
   const pixelSkyRef = useRef(null);
 
   const handleClick = (action) => setNotice(messages[action]);
@@ -168,6 +170,8 @@ export function HomePage() {
   }, []);
 
   const connectAndJoinQueue = () => {
+    if (queueRequestRef.current) return;
+    queueRequestRef.current = true;
     let socket = socketRef.current;
     if (!socket) {
       socket = io(appConfig.backendUrl, {
@@ -182,19 +186,23 @@ export function HomePage() {
       });
       socketRef.current = socket;
       socket.on("match:found", (payload) => {
+        matchRef.current = payload;
         setMatch(payload);
         setQueueState("found");
       });
       socket.on("match:error", (payload) => {
+        if (payload?.match_id && matchRef.current?.match_id !== payload.match_id) return;
         setNotice(payload.message ?? "The queue could not complete your request.");
         setQueueState("error");
       });
       socket.on("match:cancelled", (payload) => {
+        if (matchRef.current?.match_id === payload.match_id) matchRef.current = null;
         setMatch((current) => current?.match_id === payload.match_id ? null : current);
         setNotice(payload.message ?? "The pending match was cancelled.");
         setScreen("home");
       });
       socket.on("connect_error", () => {
+        queueRequestRef.current = false;
         setNotice("Could not reach the matchmaking server. Please try again.");
         setQueueState("error");
       });
@@ -203,6 +211,7 @@ export function HomePage() {
     const join = () => {
       socket.emit("guest:create", guestIdRef.current ? { guest_id: guestIdRef.current } : {}, (created) => {
         if (!created?.ok) {
+          queueRequestRef.current = false;
           setNotice(created?.error?.message ?? "Could not create a guest session.");
           setQueueState("error");
           return;
@@ -210,6 +219,7 @@ export function HomePage() {
         guestIdRef.current = created.guest.guest_id;
         window.localStorage.setItem("improv-faceoff:guest-id", guestIdRef.current);
         socket.emit("queue:join", { guest_id: guestIdRef.current }, (joined) => {
+          queueRequestRef.current = false;
           if (!joined?.ok) {
             setNotice(joined?.error?.message ?? "Could not join the public queue.");
             setQueueState("error");
@@ -233,8 +243,23 @@ export function HomePage() {
     connectAndJoinQueue();
   };
 
+  const showServerRequeue = (response) => {
+    setNotice("");
+    // The server may have immediately paired us and already emitted
+    // match:found before this acknowledgement. Do not wipe that newer match.
+    if (response?.status !== "paired") {
+      matchRef.current = null;
+      setMatch(null);
+      setQueueState("searching");
+    } else {
+      setQueueState("found");
+    }
+    setScreen("matchmaking");
+  };
+
   const resetToHome = () => {
     setNotice("");
+    matchRef.current = null;
     setMatch(null);
     setQueueState("searching");
     setScreen("home");
@@ -281,7 +306,7 @@ export function HomePage() {
   };
 
   if (screen === "media") {
-    return <MediaRoom match={match} guestId={guestIdRef.current} socket={socketRef.current} onLeave={returnHome} onRequeue={startSearch} />;
+    return <MediaRoom match={match} guestId={guestIdRef.current} socket={socketRef.current} onLeave={returnHome} onRequeue={showServerRequeue} />;
   }
 
   if (screen === "matchmaking") {
