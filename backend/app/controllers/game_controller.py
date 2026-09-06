@@ -12,6 +12,7 @@ from app.services.game_service import GameService, GameStateError, SwitchRejecte
 from app.services.match_integration_service import MatchIntegrationService
 from app.services.matchmaking_service import MatchmakingService
 from app.services.redis_service import StorageUnavailableError
+from app.services.scenario_service import ScenarioGenerationError
 from app.services.transcript_service import TranscriptService
 from app.services.transcription_service import TranscriptionService
 from app.views.socket_views import (
@@ -68,6 +69,9 @@ def register_game_handlers(
             return {"ok": True, "state": match.state.value}
         except (GameStateError, ValueError) as error:
             _emit_error("INVALID_PAYLOAD", str(error))
+            return {"ok": False}
+        except ScenarioGenerationError as error:
+            _emit_error("SCENARIO_UNAVAILABLE", str(error))
             return {"ok": False}
         except StorageUnavailableError:
             _emit_error("STORAGE_UNAVAILABLE", "Game state is temporarily unavailable")

@@ -754,6 +754,9 @@ renders the shared scenario, selected tone, and the signed-in player's own
 role during the countdown and active round. The backend test asserts that both
 Socket.IO clients receive an identical scenario payload. The remaining I3
 completion check is a two-browser test through the existing I2 environment.
+Production matches now require `GEMINI_API_KEY` and use Gemini generation;
+the deterministic astronaut scene remains available only to automated tests
+and the standalone mock judging route.
 
 ---
 

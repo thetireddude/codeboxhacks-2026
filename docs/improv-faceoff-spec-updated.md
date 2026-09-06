@@ -1305,6 +1305,10 @@ match-bound PCM16 stream for the active local player, displays that player's
 partial speech, and renders finalized authoritative transcript events for both
 participants.
 
+Production scenario preparation requires `GEMINI_API_KEY`: it no longer falls
+back to a hardcoded scene when credentials are absent. Deterministic scenarios
+remain only in automated-test and standalone mock-judging paths.
+
 ---
 
 ## Milestone 4 — Scenario Generation

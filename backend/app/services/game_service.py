@@ -62,7 +62,6 @@ class GameService:
                     update={
                         "ready_player_ids": ready_ids,
                         "state": MatchStatus.COUNTDOWN,
-                        "scenario": match.scenario or self.MOCK_SCENARIO,
                     }
                 )
                 starts_countdown = True
