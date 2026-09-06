@@ -73,6 +73,7 @@ def register_matchmaking_handlers(
 
     @socketio.on("match:cancel")
     def cancel_match(payload: dict | None) -> dict:
+        """Release both guests when either leaves before the round begins."""
         try:
             if not isinstance(payload, dict):
                 raise ValueError("payload must be an object")
