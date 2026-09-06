@@ -8,13 +8,14 @@ function emitWithAck(socket, event, payload) {
  * Capture mono microphone audio, resample it to 16 kHz PCM16, and send it to
  * the A2 Socket.IO boundary. Call stop() when the turn or room ends.
  */
-export async function startPcm16Capture({ socket, playerId, onError }) {
+export async function startPcm16Capture({ socket, playerId, matchId, guestId, onError }) {
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
   });
   try {
     const started = await emitWithAck(socket, "transcription:start", {
       player_id: playerId,
+      ...(matchId ? { match_id: matchId, guest_id: guestId } : {}),
     });
     if (!started?.ok) {
       throw new Error(started?.error?.message ?? "Could not start transcription.");
