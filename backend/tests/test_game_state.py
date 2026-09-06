@@ -17,6 +17,10 @@ class SwitchRoundConfig(FastRoundConfig):
     ROUND_DURATION_MS = 1_000
 
 
+class CleanupRoundConfig(FastRoundConfig):
+    MATCH_CLEANUP_DELAY_MS = 10
+
+
 def _new_guest(client):
     response = client.emit("guest:create", {}, callback=True)
     assert response["ok"] is True
@@ -111,7 +115,10 @@ def test_ready_countdown_turns_and_authoritative_round_end():
     assert _wait_for(second_client, "turn:changed")["active_player_id"] == "B"
     assert _wait_for(first_client, "round:end")["match_id"] == match_id
 
-    _wait_for_state(app, first_guest["guest_id"], MatchStatus.SCORING)
+    results = _wait_for(second_client, "results:ready")
+    assert results["match_id"] == match_id
+    assert results["results"]["winner"] == "TIE"
+    _wait_for_state(app, first_guest["guest_id"], MatchStatus.RESULTS)
     assert first_client.emit(
         "turn:complete",
         {"match_id": match_id, "guest_id": first_guest["guest_id"]},
@@ -256,3 +263,29 @@ def test_listener_switches_are_broadcast_repeatable_and_idempotent():
     )
     assert after_round == {"ok": False, "code": "ROUND_NOT_ACTIVE"}
     assert _wait_for(second_client, "switch:rejected")["code"] == "ROUND_NOT_ACTIVE"
+
+
+def test_completed_match_state_is_cleaned_up_after_result_delivery():
+    app, first_client, second_client, first_guest, second_guest, match_id = (
+        _paired_clients(CleanupRoundConfig)
+    )
+    first_client.emit(
+        "player:ready",
+        {"match_id": match_id, "guest_id": first_guest["guest_id"]},
+        callback=True,
+    )
+    second_client.emit(
+        "player:ready",
+        {"match_id": match_id, "guest_id": second_guest["guest_id"]},
+        callback=True,
+    )
+    _wait_for(first_client, "results:ready")
+
+    deadline = time.monotonic() + 1
+    service = app.extensions["matchmaking_service"]
+    while time.monotonic() < deadline:
+        if service.get_match_for_guest(UUID(first_guest["guest_id"])) is None:
+            break
+        time.sleep(0.01)
+    else:
+        raise AssertionError("Completed match was not cleaned up")

@@ -43,4 +43,6 @@ class MatchState(BaseModel):
     round_started_at: datetime | None
     active_player_id: PlayerSlot | None
     switches_remaining: SwitchInventory
+    # None means a newer Switch superseded this one before speech restarted.
+    switch_response_latencies: dict[str, int | None] = Field(default_factory=dict)
     transcript_events: list[TranscriptEvent]

@@ -88,3 +88,17 @@ def round_end_payload(match: MatchState, ended_at: str) -> dict:
             event.model_dump(mode="json") for event in match.transcript_events
         ],
     }
+
+
+def results_ready_payload(results) -> dict:
+    return {
+        "match_id": str(results.match_id),
+        "results": results.model_dump(mode="json"),
+    }
+
+
+def transcript_event_payload(match: MatchState, event) -> dict:
+    return {
+        "match_id": str(match.match_id),
+        "event": event.model_dump(mode="json"),
+    }

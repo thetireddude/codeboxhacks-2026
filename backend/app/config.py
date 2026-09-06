@@ -32,14 +32,26 @@ class AppConfig:
 
     ROUND_DURATION_MS = _as_int("ROUND_DURATION_MS", 60_000)
     COUNTDOWN_DURATION_MS = _as_int("COUNTDOWN_DURATION_MS", 3_000)
+    MATCH_CLEANUP_DELAY_MS = _as_int("MATCH_CLEANUP_DELAY_MS", 300_000)
     STARTING_SWITCH_COUNT = _as_int("STARTING_SWITCH_COUNT", 5)
-    TURN_END_SILENCE_MS = _as_int("TURN_END_SILENCE_MS", 900)
+    TURN_END_SILENCE_MS = _as_int("TURN_END_SILENCE_MS", 500)
+    SWITCH_RESPONSE_MIN_MS = _as_int("SWITCH_RESPONSE_MIN_MS", 0)
     SWITCH_MODE = os.getenv("SWITCH_MODE", "ALWAYS_AVAILABLE_DURING_OPPONENT_TURN")
     CHAIN_SWITCH_WINDOW_MS = _as_int("CHAIN_SWITCH_WINDOW_MS", 500)
 
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
     GEMINI_SCENARIO_MODEL = os.getenv("GEMINI_SCENARIO_MODEL", "gemini-3.1-flash-lite")
     GEMINI_SCENARIO_MAX_ATTEMPTS = _as_int("GEMINI_SCENARIO_MAX_ATTEMPTS", 2)
+    GEMINI_JUDGE_MODEL = os.getenv("GEMINI_JUDGE_MODEL", "gemini-3.1-flash-lite")
+    # Keep post-round feedback responsive: the SDK retries are disabled below,
+    # and one well-formed structured attempt is sufficient for the mockup flow.
+    GEMINI_JUDGE_MAX_ATTEMPTS = _as_int("GEMINI_JUDGE_MAX_ATTEMPTS", 1)
+    GEMINI_JUDGE_TIMEOUT_MS = _as_int("GEMINI_JUDGE_TIMEOUT_MS", 12_000)
+
+    # A6 arcade-Speed curve. Points decay linearly per second after a Switch.
+    SPEED_BASE_POINTS = _as_int("SPEED_BASE_POINTS", 500)
+    SPEED_DECAY_POINTS_PER_SECOND = _as_int("SPEED_DECAY_POINTS_PER_SECOND", 120)
+    SPEED_MAX_POINTS = _as_int("SPEED_MAX_POINTS", 2000)
     GEMINI_SCENARIO_TONES = (
         Tone.RELATABLE,
         Tone.WACKY,

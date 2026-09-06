@@ -116,3 +116,13 @@ class MatchmakingService:
 
     def get_match_for_guest(self, guest_id: UUID) -> MatchState | None:
         return self._storage.get_match_for_guest(guest_id)
+
+    def cleanup_match(self, match_id: UUID) -> None:
+        match = self._storage.get_match(match_id)
+        if match is None:
+            return
+        for guest_id in (match.player_a_id, match.player_b_id):
+            guest = self._storage.get_guest(guest_id)
+            if guest is not None:
+                self._save_guest(guest, GuestStatus.LOBBY)
+        self._storage.delete_match(match)
