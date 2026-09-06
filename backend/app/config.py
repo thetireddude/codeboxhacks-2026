@@ -2,6 +2,8 @@ import os
 
 from dotenv import load_dotenv
 
+from .models.scenario import Tone
+
 load_dotenv()
 
 
@@ -34,6 +36,27 @@ class AppConfig:
     SWITCH_MODE = os.getenv("SWITCH_MODE", "ALWAYS_AVAILABLE_DURING_OPPONENT_TURN")
     CHAIN_SWITCH_WINDOW_MS = _as_int("CHAIN_SWITCH_WINDOW_MS", 500)
 
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+    GEMINI_SCENARIO_MODEL = os.getenv("GEMINI_SCENARIO_MODEL", "gemini-3.1-flash-lite")
+    GEMINI_SCENARIO_MAX_ATTEMPTS = _as_int("GEMINI_SCENARIO_MAX_ATTEMPTS", 2)
+    GEMINI_SCENARIO_TONES = (
+        Tone.RELATABLE,
+        Tone.WACKY,
+        Tone.FUNNY,
+        Tone.STUPID,
+        Tone.SERIOUS,
+        Tone.SAD,
+    )
+    GEMINI_SCENARIO_PROMPT_TEMPLATE = (
+        "Create an original, brief improv scene starter in a {tone} tone. Should be no more than 12 words.\n\n"
+        "Give both performers distinct, complementary roles with an immediate "
+        "relationship or tension. The setup must be playable and readable immediately in a "
+        "short two-person scene.\n\n"
+        "Do not use real people, copyrighted characters, slurs, sexual content, "
+        "graphic violence, illegal instructions, or stereotypes about protected "
+        "groups. Do not include a winner, scoring instruction, Switch rule, or "
+        "gameplay modifier."
+    )
     REDIS_URL = os.getenv("REDIS_URL") or "redis://localhost:6379/0"
     REDIS_KEY_PREFIX = os.getenv("REDIS_KEY_PREFIX", "improv-faceoff")
     USE_IN_MEMORY_REDIS = os.getenv("USE_IN_MEMORY_REDIS", "false").lower() == "true"
