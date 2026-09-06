@@ -92,15 +92,21 @@ class AppConfig:
     GEMINI_SCENARIO_TONES = (
         Tone.MUNDANE,
         Tone.RELATABLE,
-        Tone.WACKY,
         Tone.FUNNY,
-        Tone.STUPID,
         Tone.SERIOUS,
         Tone.SAD,
+        Tone.AWKWARD,
+        Tone.TENSE,
+        Tone.WHOLESOME,
+        Tone.EMOTIONAL,
+        Tone.SUSPENSEFUL,
+        Tone.DRAMATIC,
     )
     GEMINI_SCENARIO_PROMPT_TEMPLATE = "\n".join([
         "Create one original two-person improv scene starter in a {tone} tone.",
         "For a mundane tone, use an ordinary everyday situation without a hidden twist, coincidence, or heightened premise.",
+        "For emotional or dramatic tones, use a grounded human stake rather than melodrama or a secret-reveal plot.",
+        "For a suspenseful tone, use a small immediate uncertainty or time pressure; do not use danger, violence, or a hidden villain.",
         "", "The scene should be a simple, concrete, playable starting point, not a plot.",
         "Focus on what is happening between the two people right now. Include at most one meaningful complication.",
         "Leave the outcome, explanation, and escalation for the performers to invent.",

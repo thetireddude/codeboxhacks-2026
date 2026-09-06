@@ -6,15 +6,16 @@ from pydantic import BaseModel, ConfigDict, Field
 class Tone(StrEnum):
     MUNDANE = "mundane"
     RELATABLE = "relatable"
+    # Retained solely to parse legacy fixtures and already-created matches;
+    # it is not present in the live generation pool.
     WACKY = "wacky"
     FUNNY = "funny"
-    STUPID = "stupid"
     SERIOUS = "serious"
     SAD = "sad"
     AWKWARD = "awkward"
     TENSE = "tense"
     EMOTIONAL = "emotional"
-    CHAOTIC = "chaotic"
+    SUSPENSEFUL = "suspenseful"
     WHOLESOME = "wholesome"
     DRAMATIC = "dramatic"
 

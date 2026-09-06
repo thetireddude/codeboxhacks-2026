@@ -8,7 +8,7 @@
   "properties": {
     "tone": {
       "type": "string",
-      "enum": ["relatable", "wacky", "funny", "stupid", "serious", "sad"]
+      "enum": ["mundane", "relatable", "funny", "serious", "sad", "awkward", "tense", "wholesome", "emotional", "suspenseful", "dramatic"]
     },
     "scenario": { "type": "string", "minLength": 1 },
     "player_a_role": { "type": "string", "minLength": 1 },
