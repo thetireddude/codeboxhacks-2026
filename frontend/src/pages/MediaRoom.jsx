@@ -31,6 +31,16 @@ function connectionMessage(status) {
   return messages[status] ?? "Preparing secure media.";
 }
 
+function SwitchImpactOverlay({ impact }) {
+  if (!impact) return null;
+  return (
+    <div key={impact.eventId} className="switch-impact" role="status" aria-live="assertive">
+      <div className="switch-impact__vignette" aria-hidden="true" />
+      <p className="switch-impact__text">SWITCHED!</p>
+    </div>
+  );
+}
+
 // I2 receives the real I1 match and persistent Socket.IO connection. I3-I6 own
 // scenario, transcript, Switch, and scoring integrations.
 export function MediaRoom({ match, guestId, socket, onLeave }) {
@@ -39,7 +49,8 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
   const remoteAudioRef = useRef(null);
   const roomRef = useRef(null);
   const captureRef = useRef(null);
-  const switchFeedbackTimerRef = useRef(null);
+  const switchImpactTimerRef = useRef(null);
+  const handledSwitchEventIdsRef = useRef(new Set());
   const [connectionState, setConnectionState] = useState("setup");
   const [errorMessage, setErrorMessage] = useState("");
   const [devices, setDevices] = useState({ camera: false, microphone: false });
@@ -55,7 +66,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
   const [switchesRemaining, setSwitchesRemaining] = useState({ A: 0, B: 0 });
   const [captureCycle, setCaptureCycle] = useState(0);
   const [isSwitching, setIsSwitching] = useState(false);
-  const [showSwitchFeedback, setShowSwitchFeedback] = useState(false);
+  const [switchImpact, setSwitchImpact] = useState(null);
   const [results, setResults] = useState(null);
 
   const localPlayer = match.player_id;
@@ -63,6 +74,32 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
   const opponentName = match.opponent?.display_name ?? "OPPONENT";
   const isInRound = connectionState === "countdown" || connectionState === "active";
   const ownRole = scenario?.[localPlayer === "A" ? "player_a_role" : "player_b_role"];
+
+  const handleSwitchEvent = useCallback((event) => {
+    if (!event?.id || handledSwitchEventIdsRef.current.has(event.id)) return;
+    handledSwitchEventIdsRef.current.add(event.id);
+    if (handledSwitchEventIdsRef.current.size > 100) {
+      const oldestId = handledSwitchEventIdsRef.current.values().next().value;
+      handledSwitchEventIdsRef.current.delete(oldestId);
+    }
+
+    // The same authoritative event can arrive through the acknowledgement,
+    // broadcast, and transcript stream. It should produce exactly one
+    // match-wide screen impact per client.
+    window.clearTimeout(switchImpactTimerRef.current);
+    setSwitchImpact({ eventId: event.id });
+    switchImpactTimerRef.current = window.setTimeout(() => {
+      setSwitchImpact((current) => current?.eventId === event.id ? null : current);
+    }, 1200);
+
+    // Presentation is match-wide, while only the interrupted player must
+    // restart transcription capture.
+    if (event.target_player_id === localPlayer) {
+      setPartialTranscript("");
+      setTranscriptionStatus("Switch received — starting your replacement response…");
+      setCaptureCycle((current) => current + 1);
+    }
+  }, [localPlayer]);
 
   const detachMedia = () => {
     const room = roomRef.current;
@@ -96,6 +133,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       if (payload.match_id !== match.match_id) return;
       if (payload.event?.type === "switch") {
         setTranscript((current) => current.some((line) => line.id === payload.event.id) ? current : [...current, payload.event]);
+        handleSwitchEvent(payload.event);
         return;
       }
       if (payload.event?.type !== "speech") return;
@@ -106,17 +144,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       if (payload.match_id !== match.match_id) return;
       setSwitchesRemaining(payload.switches_remaining);
       setIsSwitching(false);
-      if (payload.event?.target_player_id === localPlayer) {
-        setPartialTranscript("");
-        setTranscriptionStatus("Switch received — starting your replacement response…");
-        setCaptureCycle((current) => current + 1);
-        window.clearTimeout(switchFeedbackTimerRef.current);
-        setShowSwitchFeedback(false);
-        window.requestAnimationFrame(() => {
-          setShowSwitchFeedback(true);
-          switchFeedbackTimerRef.current = window.setTimeout(() => setShowSwitchFeedback(false), 1200);
-        });
-      }
+      handleSwitchEvent(payload.event);
     };
     const onSwitchRejected = (payload) => {
       if (payload.match_id !== match.match_id) return;
@@ -176,12 +204,12 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       socket.off("switch:rejected", onSwitchRejected);
       captureRef.current?.stop();
       captureRef.current = null;
-      window.clearTimeout(switchFeedbackTimerRef.current);
+      window.clearTimeout(switchImpactTimerRef.current);
       socket.off("disconnect", onDisconnect);
       socket.off("connect", onReconnect);
       detachMedia();
     };
-  }, [guestId, localPlayer, match.match_id, socket]);
+  }, [guestId, handleSwitchEvent, localPlayer, match.match_id, socket]);
 
   useEffect(() => {
     if (connectionState !== "active" || round?.active_player_id !== localPlayer || captureRef.current) return undefined;
@@ -332,11 +360,16 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       guest_id: guestId,
       request_id: crypto.randomUUID(),
     }, (response) => {
-      if (response?.ok) return;
+      if (response?.ok) {
+        setSwitchesRemaining(response.switches_remaining ?? { A: 0, B: 0 });
+        setIsSwitching(false);
+        handleSwitchEvent(response.event);
+        return;
+      }
       setIsSwitching(false);
       setErrorMessage(response?.code ? `Switch unavailable: ${response.code}` : "Switch was rejected.");
     });
-  }, [canPressSwitch, guestId, match.match_id, socket]);
+  }, [canPressSwitch, guestId, handleSwitchEvent, match.match_id, socket]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -392,10 +425,9 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
           )}
 
           <div className={`video-grid ${isInRound ? "game-video-grid" : ""}`}>
-            <article className={`video-tile video-tile--local ${round?.active_player_id === localPlayer ? "video-tile--active" : ""} ${showSwitchFeedback ? "video-tile--switched" : ""}`}>
+            <article className={`video-tile video-tile--local ${round?.active_player_id === localPlayer ? "video-tile--active" : ""}`}>
               <video ref={localVideoRef} autoPlay muted playsInline className={hasLocalVideo ? "" : "video-tile__hidden"} />
               {!hasLocalVideo && <div className="video-placeholder"><b>YOU</b><span>{connectionState === "connecting" ? "CONNECTING CAMERA…" : "CAMERA PREVIEW"}</span></div>}
-              {showSwitchFeedback && <div className="switch-feedback" role="status" aria-live="assertive"><b>SWITCHED!</b></div>}
               <div className="video-tile__label"><span>YOU · PLAYER {localPlayer}</span><b>{isInRound && round?.active_player_id !== localPlayer ? "○ TURN MUTED" : devices.microphone ? "● MIC ON" : "○ MIC OFF"}</b></div>
             </article>
             <article className={`video-tile video-tile--remote ${round?.active_player_id === opponentPlayer ? "video-tile--active" : ""}`}>
@@ -426,6 +458,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
           </>}
         </div>
       </section>
+      <SwitchImpactOverlay impact={switchImpact} />
     </main>
   );
 }

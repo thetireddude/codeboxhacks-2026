@@ -285,8 +285,8 @@ button:not(.guest-banner button:first-of-type):active { box-shadow: inset 0 4px 
 .home-page .match-button { text-shadow: -1px 0 currentColor, 1px 0 currentColor; }
 @media (max-width: 560px) { .home-page .round-icon { height: 44px; top: 14px; width: 44px; }.home-page .round-icon--left { left: 14px; }.home-page .round-icon--right { right: 14px; } }
 .home-page .round-icon, .home-page .match-button { align-items: center; box-sizing: border-box; display: inline-flex; justify-content: center; line-height: 1; padding: 0; text-align: center; }.home-page .round-icon--right { padding-left: 1px; }.home-page .match-button { padding-inline: 34px; }
-.video-tile--switched::after { animation: switch-damage-vignette 1.2s ease-out both; background: radial-gradient(ellipse at center, transparent 26%, rgba(108, 0, 0, .14) 49%, rgba(197, 0, 0, .76) 100%); content: ""; inset: 0; pointer-events: none; position: absolute; z-index: 2; }
-.switch-feedback { align-items: center; animation: switch-feedback-pop 1.2s cubic-bezier(.2,.85,.2,1) both; color: #fff5f5; display: flex; font-family: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif; font-size: clamp(34px, 5vw, 62px); inset: 0; justify-content: center; letter-spacing: .08em; pointer-events: none; position: absolute; text-shadow: 3px 3px 0 #790000, 0 0 18px #f20b0b; z-index: 3; }
-.switch-feedback b { transform: rotate(-4deg); }
-@keyframes switch-damage-vignette { 0% { opacity: 0; } 14% { opacity: 1; } 100% { opacity: 0; } }
-@keyframes switch-feedback-pop { 0% { opacity: 0; transform: scale(.45); } 16% { opacity: 1; transform: scale(1.15); } 32% { transform: scale(.96); } 100% { opacity: 0; transform: scale(1.04); } }
+.switch-impact { align-items: center; display: flex; inset: 0; justify-content: center; pointer-events: none; position: fixed; z-index: 100; }
+.switch-impact__vignette { animation: switch-impact-vignette 1.2s ease-out both; background: radial-gradient(ellipse at center, transparent 22%, rgba(108, 0, 0, .17) 48%, rgba(197, 0, 0, .83) 100%); inset: 0; position: absolute; }
+.switch-impact__text { animation: switch-impact-text 1.2s cubic-bezier(.2,.85,.2,1) both; color: #fff5f5; font-family: var(--pixel-font); font-size: clamp(28px, 5vw, 62px); letter-spacing: .08em; margin: 0; position: relative; text-shadow: 4px 4px 0 #790000, 0 0 20px #f20b0b; z-index: 1; }
+@keyframes switch-impact-vignette { 0% { opacity: 0; } 14% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes switch-impact-text { 0% { opacity: 0; transform: scale(.45) rotate(-4deg); } 16% { opacity: 1; transform: scale(1.15) rotate(-4deg); } 32% { transform: scale(.96) rotate(-4deg); } 100% { opacity: 0; transform: scale(1.04) rotate(-4deg); } }
