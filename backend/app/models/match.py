@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from .scenario import Scenario
+from .results import MatchResults
 from .transcript import TranscriptEvent
 
 PlayerSlot = Literal["A", "B"]
@@ -46,3 +47,6 @@ class MatchState(BaseModel):
     # None means a newer Switch superseded this one before speech restarted.
     switch_response_latencies: dict[str, int | None] = Field(default_factory=dict)
     transcript_events: list[TranscriptEvent]
+    # Retained for the short post-round cleanup window so a reconnecting player
+    # receives the identical authoritative result.
+    results: MatchResults | None = None

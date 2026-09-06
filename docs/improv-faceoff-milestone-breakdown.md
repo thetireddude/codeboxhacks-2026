@@ -910,8 +910,11 @@ The media screen now transitions from the authoritative `round:end` event to
 a judging state, then renders the `results:ready` payload for both players.
 The result view displays winner/tie status, both final totals, every arcade
 category, each player's best moment and improvement, and the shared highlight
-reel. The remaining I6 completion check is a real two-browser round using
-Gemini judging to confirm both clients receive and render the same payload.
+reel. The result is retained for the existing short cleanup window: if a
+player transiently reconnects while Gemini is judging, the restored guest
+binding receives the same authoritative `results:ready` payload. The remaining
+I6 completion check is a real two-browser round using Gemini judging to confirm
+both clients receive and render the same payload.
 If Gemini fails in the background judging task, both players now receive a
 clear `JUDGING_UNAVAILABLE` match error and the match is scheduled for cleanup
 instead of remaining indefinitely in the scoring state.

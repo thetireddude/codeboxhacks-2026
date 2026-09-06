@@ -51,7 +51,7 @@ export async function startPcm16Capture({ socket, playerId, matchId, guestId, on
         stream.getTracks().forEach((track) => track.stop());
         socket.off("transcription:error", handleError);
         await context.close();
-        await emitWithAck(socket, "transcription:stop");
+        await emitWithAck(socket, "transcription:stop", {});
       },
     };
   } catch (error) {

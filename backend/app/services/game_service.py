@@ -354,7 +354,9 @@ class GameService:
                 raise GameStateError("Match is not being scored")
             if results.match_id != match_id:
                 raise GameStateError("Result match_id does not match the active match")
-            match = match.model_copy(update={"state": MatchStatus.RESULTS})
+            match = match.model_copy(
+                update={"state": MatchStatus.RESULTS, "results": results}
+            )
             self._storage.save_match(match)
             return match
 

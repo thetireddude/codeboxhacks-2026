@@ -45,6 +45,7 @@ changing a required field is a breaking contract change.
 | `transcription:error` | `{ code, message }` | Report a recoverable microphone or STT failure. |
 | `round:end` | `{ match_id, ended_at, transcript_events }` | Stop input and share the final chronological event stream. |
 | `results:ready` | `{ match_id, results }` | Share a payload conforming to `schemas/results.json`. |
+| `match:resume` | `{ match_id, guest_id }` | After reconnect, restore the ended/scoring state or replay the retained final result. |
 | `player:disconnected` | `{ match_id, player_id, timestamp }` | Notify the remaining player. |
 
 ## Internal and service events

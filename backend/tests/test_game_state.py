@@ -160,6 +160,37 @@ def test_judge_failure_still_returns_objective_round_results():
     _wait_for_state(app, first_guest["guest_id"], MatchStatus.RESULTS)
 
 
+def test_reconnecting_player_receives_the_retained_final_results():
+    app, first_client, second_client, first_guest, second_guest, match_id = (
+        _paired_clients()
+    )
+    first_client.emit(
+        "player:ready",
+        {"match_id": match_id, "guest_id": first_guest["guest_id"]},
+        callback=True,
+    )
+    second_client.emit(
+        "player:ready",
+        {"match_id": match_id, "guest_id": second_guest["guest_id"]},
+        callback=True,
+    )
+    original_results = _wait_for(first_client, "results:ready")
+    _wait_for(second_client, "results:ready")
+
+    first_client.disconnect()
+    reconnecting_client = socketio.test_client(app)
+    restored = reconnecting_client.emit(
+        "guest:create", {"guest_id": first_guest["guest_id"]}, callback=True
+    )
+    assert restored["ok"] is True
+    assert reconnecting_client.emit(
+        "match:resume",
+        {"match_id": match_id, "guest_id": first_guest["guest_id"]},
+        callback=True,
+    ) == {"ok": True, "state": "RESULTS"}
+    assert _wait_for(reconnecting_client, "results:ready") == original_results
+
+
 def test_disconnect_stops_an_active_round_and_notifies_opponent():
     (
         app,

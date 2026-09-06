@@ -1289,15 +1289,19 @@ participant's video and audio. The frontend emits `player:ready` only after
 local media setup, and follows backend `round:prepare`, `round:start`, and
 `round:end` events for the shared countdown and round clock.
 
-The implementation also keeps media controls available after round end and
-releases a disconnected guest's socket and old match index so that guest can
-return to the public queue.
+The implementation also keeps media controls available after round end. A
+disconnected guest returns to the public queue normally before a round ends;
+after round end, its match binding and final result are retained for the short
+cleanup window so a transient reconnect can receive the shared judging result.
 
 This does not complete the overall game loop: scenario display (Milestone 4 /
 I3) and live transcript rendering (Milestone 5 / I4) are now implemented on
 the frontend and await the existing two-browser remote validation. The
-remaining separate work is turn/Switch UX (I5), real score/result presentation
-(I6), active-match reconnect/resume, and permanent HTTPS hosting.
+remaining separate work was turn/Switch UX (I5), real score/result presentation
+(I6), active-match reconnect/resume, and permanent HTTPS hosting. I5 and I6
+are now implemented; I6 also restores an ended/scoring match or its retained
+result after a transient Socket.IO reconnect. Longer active-round recovery and
+permanent HTTPS hosting remain separate work.
 
 The I3 screen renders the backend-authoritative `round:prepare` scenario,
 tone, and player-specific role for both clients. The I4 screen opens a

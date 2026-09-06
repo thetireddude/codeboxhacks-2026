@@ -15,7 +15,8 @@
     "active_player_id",
     "switches_remaining",
     "switch_response_latencies",
-    "transcript_events"
+    "transcript_events",
+    "results"
   ],
   "properties": {
     "match_id": { "type": "string", "format": "uuid" },
@@ -82,6 +83,12 @@
     "transcript_events": {
       "type": "array",
       "items": { "$ref": "transcript-event.json" }
+    },
+    "results": {
+      "oneOf": [
+        { "$ref": "results.json" },
+        { "type": "null" }
+      ]
     }
   }
 }

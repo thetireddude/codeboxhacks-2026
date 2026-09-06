@@ -134,7 +134,14 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       setConnectionState("ended");
       setErrorMessage(payload.message);
     };
-    const onDisconnect = () => setErrorMessage("The match server disconnected. Leave and find a new match.");
+    const onDisconnect = () => setErrorMessage("Reconnecting to the match server…");
+    const onReconnect = () => {
+      socket.emit("guest:create", { guest_id: guestId }, (created) => {
+        if (!created?.ok) return;
+        socket.emit("match:resume", { match_id: match.match_id, guest_id: guestId });
+      });
+      setErrorMessage("");
+    };
 
     socket.on("round:prepare", onPrepare);
     socket.on("round:start", onStart);
@@ -147,6 +154,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
     socket.on("switch:triggered", onSwitchTriggered);
     socket.on("switch:rejected", onSwitchRejected);
     socket.on("disconnect", onDisconnect);
+    socket.on("connect", onReconnect);
     return () => {
       socket.off("round:prepare", onPrepare);
       socket.off("round:start", onStart);
@@ -161,9 +169,10 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       captureRef.current?.stop();
       captureRef.current = null;
       socket.off("disconnect", onDisconnect);
+      socket.off("connect", onReconnect);
       detachMedia();
     };
-  }, [localPlayer, match.match_id, socket]);
+  }, [guestId, localPlayer, match.match_id, socket]);
 
   useEffect(() => {
     if (connectionState !== "active" || round?.active_player_id !== localPlayer || captureRef.current) return undefined;

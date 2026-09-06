@@ -28,7 +28,14 @@ export function HomePage() {
   const connectAndJoinQueue = () => {
     let socket = socketRef.current;
     if (!socket) {
-      socket = io(appConfig.backendUrl, { autoConnect: false });
+      socket = io(appConfig.backendUrl, {
+        autoConnect: false,
+        // Avoid a polling-to-WebSocket upgrade in the middle of a live round.
+        transports: ["websocket"],
+        reconnection: true,
+        reconnectionDelay: 500,
+        reconnectionDelayMax: 2000,
+      });
       socketRef.current = socket;
       socket.on("match:found", (payload) => {
         setMatch(payload);
