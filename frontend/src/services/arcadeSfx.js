@@ -52,8 +52,8 @@ export function playButtonSfx() {
 }
 
 export function playSwitchSfx() {
-  tone(180, 0.16, "sawtooth", 0.075);
-  tone(95, 0.24, "square", 0.06, 0.07);
+  tone(180, 0.16, "sawtooth", 0.16);
+  tone(95, 0.24, "square", 0.13, 0.07);
 }
 
 export function playSpeedBonusSfx() {
