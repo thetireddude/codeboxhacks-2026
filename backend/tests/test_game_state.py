@@ -276,6 +276,64 @@ def test_player_can_leave_results_and_requeue_without_releasing_opponent_results
     ) == {"ok": True, "status": "waiting"}
 
 
+def test_queue_join_releases_a_finished_match_when_leave_ack_was_missed():
+    app, first_client, second_client, first_guest, second_guest, match_id = (
+        _paired_clients()
+    )
+    for client, guest in ((first_client, first_guest), (second_client, second_guest)):
+        client.emit(
+            "player:ready",
+            {"match_id": match_id, "guest_id": guest["guest_id"]},
+            callback=True,
+        )
+    _wait_for(first_client, "results:ready")
+    _wait_for(second_client, "results:ready")
+
+    # Simulate a lost match:leave acknowledgement: a new queue request must
+    # release only this player's completed-match binding.
+    payload = {"guest_id": first_guest["guest_id"]}
+    assert first_client.emit("queue:join", payload, callback=True) == {
+        "ok": True,
+        "status": "waiting",
+    }
+    assert first_client.emit("queue:join", payload, callback=True) == {
+        "ok": True,
+        "status": "queued",
+    }
+
+    service = app.extensions["matchmaking_service"]
+    assert service.get_match_for_guest(UUID(first_guest["guest_id"])) is None
+    retained = service.get_match_for_guest(UUID(second_guest["guest_id"]))
+    assert retained is not None
+    assert retained.match_id == UUID(match_id)
+
+
+def test_both_players_can_immediately_requeue_from_results():
+    app, first_client, second_client, first_guest, second_guest, old_match_id = (
+        _paired_clients()
+    )
+    for client, guest in ((first_client, first_guest), (second_client, second_guest)):
+        client.emit(
+            "player:ready",
+            {"match_id": old_match_id, "guest_id": guest["guest_id"]},
+            callback=True,
+        )
+    _wait_for(first_client, "results:ready")
+    _wait_for(second_client, "results:ready")
+
+    assert first_client.emit(
+        "queue:join", {"guest_id": first_guest["guest_id"]}, callback=True
+    ) == {"ok": True, "status": "waiting"}
+    paired = second_client.emit(
+        "queue:join", {"guest_id": second_guest["guest_id"]}, callback=True
+    )
+    assert paired["ok"] is True
+    assert paired["status"] == "paired"
+    assert paired["match_id"] != old_match_id
+    assert _wait_for(first_client, "match:found")["match_id"] == paired["match_id"]
+    assert _wait_for(second_client, "match:found")["match_id"] == paired["match_id"]
+
+
 def test_old_result_cleanup_does_not_release_a_player_new_match():
     app, first_client, second_client, first_guest, second_guest, old_match_id = (
         _paired_clients(RequeueCleanupRoundConfig)

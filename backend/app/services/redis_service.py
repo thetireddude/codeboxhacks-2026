@@ -97,10 +97,18 @@ end
             raise StorageUnavailableError("Redis is unavailable") from error
         return self.get_match(UUID(match_id)) if match_id else None
 
-    def release_guest_match(self, guest_id: UUID) -> None:
+    def release_guest_match(self, guest_id: UUID, expected_match_id: UUID | None = None) -> None:
         """Remove a departed guest's active-match index so they may requeue."""
         try:
-            self._client.delete(f"{self._guest_match_prefix()}{guest_id}")
+            key = f"{self._guest_match_prefix()}{guest_id}"
+            if expected_match_id is None:
+                self._client.delete(key)
+            else:
+                self._client.eval(
+                    "if redis.call('GET', KEYS[1]) == ARGV[1] then "
+                    "return redis.call('DEL', KEYS[1]) else return 0 end",
+                    1, key, str(expected_match_id),
+                )
         except RedisError as error:
             raise StorageUnavailableError("Redis is unavailable") from error
 
@@ -219,9 +227,10 @@ class InMemoryRedisService:
         match_id = self._guest_matches.get(guest_id)
         return self._matches.get(match_id) if match_id else None
 
-    def release_guest_match(self, guest_id: UUID) -> None:
+    def release_guest_match(self, guest_id: UUID, expected_match_id: UUID | None = None) -> None:
         with self._lock:
-            self._guest_matches.pop(guest_id, None)
+            if expected_match_id is None or self._guest_matches.get(guest_id) == expected_match_id:
+                self._guest_matches.pop(guest_id, None)
 
     def delete_match(self, match: MatchState) -> None:
         with self._lock:

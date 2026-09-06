@@ -41,7 +41,19 @@ class MatchmakingService:
             guest_id, proposed_match_id
         )
         if status == "matched":
-            raise MatchmakingError("Guest is already matched")
+            retained = self._storage.get_match_for_guest(guest_id)
+            if retained is None or retained.state not in (
+                MatchStatus.ROUND_END, MatchStatus.SCORING, MatchStatus.RESULTS,
+            ):
+                raise MatchmakingError("Guest is already matched")
+            # An explicit search leaves the finished round immediately, even
+            # if the client missed match:leave. Keep the opponent's results.
+            self._storage.release_guest_match(guest_id, retained.match_id)
+            status, opponent_id = self._storage.claim_queue_slot(
+                guest_id, proposed_match_id
+            )
+            if status == "matched":
+                raise MatchmakingError("Guest is already matched")
         if status == "queued":
             return "queued", None
         if status == "waiting":
@@ -109,9 +121,11 @@ class MatchmakingService:
                 )
             )
 
-    def release_guest_match(self, guest_id: UUID) -> None:
+    def release_guest_match(
+        self, guest_id: UUID, expected_match_id: UUID | None = None
+    ) -> None:
         """Make a departed guest eligible for a future public match."""
-        self._storage.release_guest_match(guest_id)
+        self._storage.release_guest_match(guest_id, expected_match_id)
 
     def leave_completed_match(
         self, guest_id: UUID, socket_id: str, match_id: UUID
@@ -127,7 +141,7 @@ class MatchmakingService:
             MatchStatus.RESULTS,
         ):
             raise MatchmakingError("A match can only be left after the round ends")
-        self._storage.release_guest_match(guest_id)
+        self._storage.release_guest_match(guest_id, match_id)
         self._save_guest(guest, GuestStatus.LOBBY)
 
     def _require_owned_guest(self, guest_id: UUID, socket_id: str) -> Guest:

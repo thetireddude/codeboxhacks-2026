@@ -56,6 +56,7 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
   const [switchesRemaining, setSwitchesRemaining] = useState({ A: 0, B: 0 });
   const [captureCycle, setCaptureCycle] = useState(0);
   const [isSwitching, setIsSwitching] = useState(false);
+  const [isLeavingResults, setIsLeavingResults] = useState(false);
   const [switchFeedback, setSwitchFeedback] = useState(null);
   const [results, setResults] = useState(null);
 
@@ -335,14 +336,25 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
       next();
       return;
     }
-    socket.emit("match:leave", { match_id: match.match_id, guest_id: guestId }, (response) => {
+    if (isLeavingResults) return;
+    setIsLeavingResults(true);
+    let completed = false;
+    const finish = (response) => {
+      if (completed) return;
+      completed = true;
+      window.clearTimeout(timeout);
       if (!response?.ok) {
         setErrorMessage("Could not leave the completed match. Please try again.");
+        setIsLeavingResults(false);
         return;
       }
       detachMedia();
       next();
-    });
+    };
+    const timeout = window.setTimeout(() => {
+      finish({ ok: false });
+    }, 2500);
+    socket.emit("match:leave", { match_id: match.match_id, guest_id: guestId }, finish);
   };
 
   const leaveRoom = () => {
@@ -416,7 +428,7 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
               </article>;
             })}</div>
             {results.highlight_events.length > 0 && <div className="results-highlights"><strong>HIGHLIGHT REEL</strong>{results.highlight_events.map((event) => <span key={`${event.player_id}-${event.label}`}>PLAYER {event.player_id} · {event.label} +{event.points}</span>)}</div>}
-            <div className="queue-actions results-actions"><button className="match-button" type="button" onClick={findNextMatch}><span className="match-button__people">↻</span><span><strong>NEXT MATCH</strong><small>FIND ANOTHER OPPONENT</small></span></button><button className="cancel-link" type="button" onClick={leaveRoom}>EXIT TO HOME</button></div>
+            <div className="queue-actions results-actions"><button className="match-button" type="button" onClick={findNextMatch} disabled={isLeavingResults}><span className="match-button__people">↻</span><span><strong>{isLeavingResults ? "JOINING…" : "NEXT MATCH"}</strong><small>{isLeavingResults ? "LEAVING RESULTS" : "FIND ANOTHER OPPONENT"}</small></span></button><button className="cancel-link" type="button" onClick={leaveRoom} disabled={isLeavingResults}>EXIT TO HOME</button></div>
           </section> : <>
           <div className={`media-heading ${isInRound ? "media-heading--game" : ""}`}>
             <p>{isInRound ? "LIVE SCENE · ROUND 1" : "ROUND ONE · MEDIA CHECK"}</p>

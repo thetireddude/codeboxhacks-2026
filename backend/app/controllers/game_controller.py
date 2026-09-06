@@ -214,7 +214,7 @@ def register_game_handlers(
                 MatchStatus.RESULTS,
             )
             if not preserve_result_delivery:
-                matchmaking_service.release_guest_match(guest_id)
+                matchmaking_service.release_guest_match(guest_id, match.match_id)
             match = game_service.disconnect_player(match.match_id, guest_id)
             slot = "A" if match.player_a_id == guest_id else "B"
             _emit_to_match(
