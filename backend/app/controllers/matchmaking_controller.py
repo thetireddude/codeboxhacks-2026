@@ -71,6 +71,49 @@ def register_matchmaking_handlers(
             _emit_error("STORAGE_UNAVAILABLE", "Matchmaking is temporarily unavailable")
             return {"ok": False}
 
+    @socketio.on("match:cancel")
+    def cancel_match(payload: dict | None) -> dict:
+        try:
+            if not isinstance(payload, dict):
+                raise ValueError("payload must be an object")
+            guest_id = _required_uuid(payload)
+            match_id = UUID(str(payload["match_id"]))
+            match = service.cancel_unstarted_match(guest_id, request.sid, match_id)
+            if match is not None:
+                _emit_match_cancelled(service, match)
+            # Cancellation is idempotent; a retry after a lost ack is harmless.
+            return {"ok": True, "cancelled": match is not None}
+        except (KeyError, MatchmakingError, ValueError) as error:
+            error_payload = match_error_payload("INVALID_PAYLOAD", str(error))
+            _emit_error(**error_payload)
+            return {"ok": False, "error": error_payload}
+        except StorageUnavailableError:
+            error_payload = match_error_payload("STORAGE_UNAVAILABLE", "Matchmaking is temporarily unavailable")
+            _emit_error(**error_payload)
+            return {"ok": False, "error": error_payload}
+
+    @socketio.on("match:requeue")
+    def requeue_match(payload: dict | None) -> dict:
+        try:
+            if not isinstance(payload, dict):
+                raise ValueError("payload must be an object")
+            guest_id = _required_uuid(payload)
+            match_id = UUID(str(payload["match_id"]))
+            status, match = service.requeue_completed_match(guest_id, request.sid, match_id)
+            if match is not None:
+                _emit_match_found(service, match)
+                return {"ok": True, "status": "paired", "match_id": str(match.match_id)}
+            return {"ok": True, "status": status}
+        except (KeyError, MatchmakingError, ValueError) as error:
+            error_payload = match_error_payload("INVALID_PAYLOAD", str(error))
+            error_payload["match_id"] = str((payload or {}).get("match_id", ""))
+            _emit_error(**error_payload)
+            return {"ok": False, "error": error_payload}
+        except StorageUnavailableError:
+            error_payload = match_error_payload("STORAGE_UNAVAILABLE", "Matchmaking is temporarily unavailable")
+            _emit_error(**error_payload)
+            return {"ok": False, "error": error_payload}
+
     @socketio.on("match:leave")
     def leave_completed_match(payload: dict | None) -> dict:
         try:

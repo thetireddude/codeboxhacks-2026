@@ -362,7 +362,21 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
   };
 
   const findNextMatch = () => {
-    releaseCompletedMatch(onRequeue);
+    if (connectionState !== "results" || isLeavingResults) return;
+    setIsLeavingResults(true);
+    socket.emit("match:requeue", {
+      match_id: match.match_id,
+      guest_id: guestId,
+      request_id: crypto.randomUUID(),
+    }, (response) => {
+      if (!response?.ok) {
+        setErrorMessage(response?.error?.message ?? "Could not start the next match. Please try again.");
+        setIsLeavingResults(false);
+        return;
+      }
+      detachMedia();
+      onRequeue(response);
+    });
   };
 
   const canPressSwitch = connectionState === "active"

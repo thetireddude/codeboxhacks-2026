@@ -203,9 +203,26 @@ def register_game_handlers(
         try:
             guest_id = UUID(guest_id_text)
             match = matchmaking_service.get_match_for_guest(guest_id)
-            matchmaking_service.disconnect_guest(guest_id, request.sid)
             if match is None:
+                matchmaking_service.disconnect_guest(guest_id, request.sid)
                 return
+            if match.state == MatchStatus.MATCH_FOUND:
+                # Leaving the found screen abandons a match neither player has
+                # started. Release both identities instead of marooning the
+                # opponent behind a stale guest-match binding.
+                cancelled = matchmaking_service.cancel_unstarted_match(
+                    guest_id, request.sid, match.match_id
+                )
+                if cancelled is not None:
+                    _emit_to_match(
+                        matchmaking_service,
+                        cancelled,
+                        "match:cancelled",
+                        {"match_id": str(cancelled.match_id), "message": "This match was cancelled before either player was ready."},
+                    )
+                matchmaking_service.disconnect_guest(guest_id, request.sid)
+                return
+            matchmaking_service.disconnect_guest(guest_id, request.sid)
             # Judging may take a few seconds. Keep the match binding during the
             # existing cleanup window so a transport reconnect receives results.
             preserve_result_delivery = match.state in (

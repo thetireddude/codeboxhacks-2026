@@ -403,6 +403,24 @@ def test_disconnect_stops_an_active_round_and_notifies_opponent():
     _wait_for_state(app, second_guest["guest_id"], MatchStatus.ROUND_END)
 
 
+def test_results_requeue_is_idempotent_and_does_not_release_opponent_results():
+    (
+        app, first_client, second_client, first_guest, second_guest, match_id,
+    ) = _paired_clients()
+    first_client.emit("player:ready", {"match_id": match_id, "guest_id": first_guest["guest_id"]}, callback=True)
+    second_client.emit("player:ready", {"match_id": match_id, "guest_id": second_guest["guest_id"]}, callback=True)
+    _wait_for(first_client, "results:ready")
+    _wait_for(second_client, "results:ready")
+
+    payload = {"match_id": match_id, "guest_id": first_guest["guest_id"], "request_id": "retry-1"}
+    assert first_client.emit("match:requeue", payload, callback=True) == {"ok": True, "status": "waiting"}
+    # A duplicate request sees the queued membership and stays harmless.
+    assert first_client.emit("match:requeue", payload, callback=True) == {"ok": True, "status": "queued"}
+    service = app.extensions["matchmaking_service"]
+    opponent_match = service.get_match_for_guest(UUID(second_guest["guest_id"]))
+    assert opponent_match is not None and str(opponent_match.match_id) == match_id
+
+
 def test_listener_switches_are_broadcast_repeatable_and_idempotent():
     (
         app,

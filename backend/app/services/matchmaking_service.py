@@ -144,6 +144,28 @@ class MatchmakingService:
         self._storage.release_guest_match(guest_id, match_id)
         self._save_guest(guest, GuestStatus.LOBBY)
 
+    def requeue_completed_match(
+        self, guest_id: UUID, socket_id: str, match_id: UUID
+    ) -> tuple[str, MatchState | None]:
+        """Atomically-ish move a results player into the public queue.
+
+        The match id makes retries safe: a late duplicate can never release a
+        newer match binding created by the first request.
+        """
+        guest = self._require_owned_guest(guest_id, socket_id)
+        current = self._storage.get_match_for_guest(guest_id)
+        if current is not None and current.match_id != match_id:
+            # The first request already completed and paired this guest again.
+            return "paired", current
+        if current is not None:
+            if current.state not in (
+                MatchStatus.ROUND_END, MatchStatus.SCORING, MatchStatus.RESULTS,
+            ):
+                raise MatchmakingError("A match can only be requeued after the round ends")
+            self._storage.release_guest_match(guest_id, match_id)
+            self._save_guest(guest, GuestStatus.LOBBY)
+        return self.join_queue(guest_id, socket_id)
+
     def _require_owned_guest(self, guest_id: UUID, socket_id: str) -> Guest:
         guest = self._storage.get_guest(guest_id)
         if guest is None or guest.socket_id != socket_id:
