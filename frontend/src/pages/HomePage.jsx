@@ -386,7 +386,7 @@ export function HomePage() {
               <ol>
                 <li><b>TWO PLAYERS, ONE SCENE.</b> Receive a scenario and two roles.</li>
                 <li><b>TAKE TURNS SPEAKING.</b> Only the active player&apos;s microphone is live.</li>
-                <li><b>USE SWITCH WISELY.</b> Spend a Switch during your opponent&apos;s turn to take over.</li>
+                <li><b>USE SWITCH WISELY.</b> Interrupt the current speaker and make them pivot into something wacky, original, and still scene-related.</li>
                 <li><b>BUILD THE SCENE.</b> Say yes, add ideas, and keep the story moving.</li>
                 <li><b>BEAT THE TIMER.</b> Gemini scores creativity, adaptability, collaboration, coherence, and speed.</li>
                 <li><b>QUEUE AGAIN.</b> Choose Next Match when the round ends.</li>
