@@ -190,8 +190,9 @@ class JudgeService:
             "Judge rejected speech only as evidence of Switch recovery; it is not "
             "scene canon. Do not score speed and do not infer timing quality from "
             "text; latency data is supplied only to explain Switch context. "
-            "Give each player a specific strongest moment and one concrete, "
-            "actionable improvement. Highlight events must cite one or more real "
+            "Give each player a specific strongest moment, one concrete actionable "
+            "improvement, and a one-sentence match overview grounded in transcript "
+            "evidence without restating numeric scores. Highlight events must cite one or more real "
             "transcript event IDs and use a concise arcade-style label. Never "
             "invent events, roles, or dialogue.\n\n"
             f"Round data:\n{json.dumps(payload, ensure_ascii=False)}"
@@ -227,8 +228,9 @@ class JudgeService:
                 },
                 "highlight": {"type": "STRING"},
                 "improvement": {"type": "STRING"},
+                "overview": {"type": "STRING"},
             },
-            "required": ["category_points", "highlight", "improvement"],
+            "required": ["category_points", "highlight", "improvement", "overview"],
         }
         return {
             "type": "OBJECT",
@@ -326,5 +328,6 @@ class TestJudgeService:
             category_points=points,
             highlight="Round complete.",
             improvement="Keep building together.",
+            overview="The deterministic test judge does not provide semantic coaching.",
         )
         return JudgeResult(player_a=player, player_b=player)

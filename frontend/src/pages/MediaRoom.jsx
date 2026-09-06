@@ -455,6 +455,7 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
               return <article key={player} className={`results-player ${results.winner === player ? "results-player--winner" : ""}`}>
                 <p>PLAYER {player}{player === localPlayer ? " · YOU" : ""}</p><b>{playerResult.total_points.toLocaleString()}</b>
                 <div className="results-categories">{Object.entries(playerResult.category_points).map(([category, points]) => <span key={category}>{category} <strong>{points}</strong></span>)}</div>
+                {playerResult.rubric_log && <section className="rubric-log" aria-label={`Player ${player} rubric log`}><strong>RUBRIC LOG</strong><p>{playerResult.rubric_log.overview}</p><div>{Object.entries(playerResult.rubric_log).filter(([category]) => category !== "overview").map(([category, entry]) => <span key={category}>{category} <b>{entry.points}</b><em>{entry.rating}</em></span>)}</div></section>}
                 <p><strong>BEST MOMENT</strong>{playerResult.highlight}</p><p><strong>TRY NEXT</strong>{playerResult.improvement}</p>
               </article>;
             })}</div>

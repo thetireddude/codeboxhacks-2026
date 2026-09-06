@@ -11,6 +11,8 @@ from app.models.results import (
     HighlightEvent,
     MatchResults,
     PlayerResult,
+    RubricCategoryLog,
+    RubricLog,
 )
 from app.models.scoring import ScoringInput
 from app.models.transcript import SwitchEvent, TranscriptEvent
@@ -142,9 +144,37 @@ class ScoringService:
         return PlayerResult(
             total_points=sum(categories.model_dump().values()),
             category_points=categories,
+            rubric_log=ScoringService._rubric_log(categories, judged_player.overview),
             highlight=judged_player.highlight,
             improvement=judged_player.improvement,
         )
+
+    @staticmethod
+    def _rubric_log(categories: CategoryPoints, overview: str) -> RubricLog:
+        return RubricLog(
+            overview=overview,
+            **{
+                category: RubricCategoryLog(
+                    points=points,
+                    rating=ScoringService._rating_for_points(points),
+                )
+                for category, points in categories.model_dump().items()
+            },
+        )
+
+    @staticmethod
+    def _rating_for_points(points: int) -> str:
+        if points == 0:
+            return "NO EVIDENCE"
+        if points < 800:
+            return "VERY LIMITED"
+        if points < 1200:
+            return "INCONSISTENT"
+        if points < 1600:
+            return "FUNCTIONAL"
+        if points < 2000:
+            return "STRONG"
+        return "EXCEPTIONAL"
 
 
 def create_scoring_service(config: Any) -> ScoringService:

@@ -96,6 +96,7 @@ class MatchIntegrationService:
             category_points=points,
             highlight="Gemini feedback was unavailable for this round.",
             improvement="Start a new match to receive Gemini coaching.",
+            overview="This round received deterministic timing results, but semantic coaching was unavailable.",
         )
         return JudgeResult(player_a=player, player_b=player)
 

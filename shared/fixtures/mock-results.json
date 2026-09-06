@@ -4,11 +4,19 @@
   "player_a": {
     "total_points": 8420,
     "category_points": {
-      "adaptability": 1920,
-      "creativity": 1760,
+      "adaptability": 1900,
+      "articulation": 1800,
       "speed": 1540,
-      "coherence": 1650,
-      "collaboration": 1550
+      "coherence": 1700,
+      "collaboration": 1480
+    },
+    "rubric_log": {
+      "overview": "Recovered confidently from the manual problem and kept the scene organized.",
+      "adaptability": { "points": 1900, "rating": "STRONG" },
+      "articulation": { "points": 1800, "rating": "STRONG" },
+      "coherence": { "points": 1700, "rating": "STRONG" },
+      "collaboration": { "points": 1480, "rating": "FUNCTIONAL" },
+      "speed": { "points": 1540, "rating": "FUNCTIONAL" }
     },
     "highlight": "Turned the upside-down manual into a confident captain's ritual.",
     "improvement": "Invite the intern to make more landing decisions earlier in the scene."
@@ -17,10 +25,18 @@
     "total_points": 7930,
     "category_points": {
       "adaptability": 1600,
-      "creativity": 1710,
+      "articulation": 1700,
       "speed": 1490,
-      "coherence": 1580,
-      "collaboration": 1550
+      "coherence": 1600,
+      "collaboration": 1540
+    },
+    "rubric_log": {
+      "overview": "Raised useful questions and can make the next action more decisive.",
+      "adaptability": { "points": 1600, "rating": "STRONG" },
+      "articulation": { "points": 1700, "rating": "STRONG" },
+      "coherence": { "points": 1600, "rating": "STRONG" },
+      "collaboration": { "points": 1540, "rating": "FUNCTIONAL" },
+      "speed": { "points": 1490, "rating": "FUNCTIONAL" }
     },
     "highlight": "Used the manual detail to challenge the captain and advance the scene.",
     "improvement": "Commit to the intern's fake expertise with a more specific landing plan."

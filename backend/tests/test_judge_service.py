@@ -20,6 +20,7 @@ VALID_JUDGMENT = {
         },
         "highlight": "Turned the upside-down manual into a captain's ritual.",
         "improvement": "Invite the intern into the landing decision earlier.",
+        "overview": "Used a confident recovery to keep the scene moving.",
     },
     "player_b": {
         "category_points": {
@@ -30,6 +31,7 @@ VALID_JUDGMENT = {
         },
         "highlight": "Used the upside-down manual to raise the stakes.",
         "improvement": "Commit to a specific landing plan sooner.",
+        "overview": "Raised the stakes while leaving a clear opening for the partner.",
     },
     "highlight_events": [
         {
