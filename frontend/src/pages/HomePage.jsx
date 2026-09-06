@@ -200,9 +200,19 @@ export function HomePage() {
       });
     }
 
-    const join = () => {
-      socket.emit("guest:create", guestIdRef.current ? { guest_id: guestIdRef.current } : {}, (created) => {
+    const join = (useFreshGuest = false) => {
+      const savedGuestId = useFreshGuest ? null : guestIdRef.current;
+      socket.emit("guest:create", savedGuestId ? { guest_id: savedGuestId } : {}, (created) => {
         if (!created?.ok) {
+          // A browser that was closed abruptly can take a little time to
+          // release its polling connection. Do not strand the next session on
+          // an anonymous, stale guest capability: create a new guest instead.
+          if (!useFreshGuest && created?.error?.message === "Guest identity is already connected elsewhere") {
+            guestIdRef.current = null;
+            window.localStorage.removeItem("improv-faceoff:guest-id");
+            join(true);
+            return;
+          }
           setNotice(created?.error?.message ?? "Could not create a guest session.");
           setQueueState("error");
           return;
@@ -211,6 +221,15 @@ export function HomePage() {
         window.localStorage.setItem("improv-faceoff:guest-id", guestIdRef.current);
         socket.emit("queue:join", { guest_id: guestIdRef.current }, (joined) => {
           if (!joined?.ok) {
+            // The saved ID may still point at a match whose disconnect cleanup
+            // has not reached the server. A fresh anonymous guest can queue
+            // immediately without waiting for that stale match to expire.
+            if (!useFreshGuest && joined?.error?.message === "Guest is already matched") {
+              guestIdRef.current = null;
+              window.localStorage.removeItem("improv-faceoff:guest-id");
+              join(true);
+              return;
+            }
             setNotice(joined?.error?.message ?? "Could not join the public queue.");
             setQueueState("error");
           }
