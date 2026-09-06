@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from flask import Blueprint, current_app, jsonify, request
@@ -13,6 +14,19 @@ from app.services.judge_service import JudgeError, JudgeService
 from app.services.scoring_service import ScoringService
 
 scoring_blueprint = Blueprint("scoring", __name__, url_prefix="/api/mockup")
+
+
+@scoring_blueprint.get("/round-prepare")
+def mock_round_prepare():
+    """Expose the same scenario shape sent by the live `round:prepare` event."""
+    starts_at = datetime.now(UTC) + timedelta(seconds=3)
+    return jsonify(
+        {
+            "match_id": "mock-i3-scenario-match",
+            "scenario": GameService.MOCK_SCENARIO.model_dump(mode="json"),
+            "starts_at": starts_at.isoformat(),
+        }
+    )
 
 
 @scoring_blueprint.post("/judge")

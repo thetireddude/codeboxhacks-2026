@@ -38,6 +38,8 @@ export function SttTestPage() {
   const [isJudging, setIsJudging] = useState(false);
   const [results, setResults] = useState(null);
   const [selectedCaseId, setSelectedCaseId] = useState("");
+  const [mockPrepare, setMockPrepare] = useState(null);
+  const [mockPlayer, setMockPlayer] = useState("A");
   const selectedCase = mockJudgmentCases.find((item) => item.id === selectedCaseId);
 
   useEffect(() => {
@@ -94,6 +96,18 @@ export function SttTestPage() {
       captureRef.current?.stop();
       socket.disconnect();
     };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`${appConfig.backendUrl}/api/mockup/round-prepare`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Could not load the I3 scenario mockup.");
+        return response.json();
+      })
+      .then((payload) => { if (active) setMockPrepare(payload); })
+      .catch((loadError) => { if (active) setError(loadError.message); });
+    return () => { active = false; };
   }, []);
 
   const start = async () => {
@@ -238,6 +252,17 @@ export function SttTestPage() {
         <p className={`stt-response-ready ${isResponseReady ? "is-ready" : "is-clearing"}`}>
           {isResponseReady ? "● READY FOR NEXT RESPONSE" : "○ CLEARING PREVIOUS RESPONSE"}
         </p>
+        <section className="stt-i3-preview" aria-label="I3 scenario integration preview">
+          <div className="stt-i3-preview__header"><p className="stt-test-label">I3 · ROUND PREPARE SCENARIO</p><span>{mockPrepare ? "● PAYLOAD RECEIVED" : "○ LOADING PAYLOAD"}</span></div>
+          {mockPrepare?.scenario && <>
+            <div className="stt-i3-player-toggle" aria-label="Mock player view">
+              {["A", "B"].map((player) => <button key={player} type="button" className={mockPlayer === player ? "is-selected" : ""} onClick={() => setMockPlayer(player)}>VIEW PLAYER {player}</button>)}
+            </div>
+            <p className="stt-i3-tone">{mockPrepare.scenario.tone} SCENE</p>
+            <p className="stt-i3-prompt">{mockPrepare.scenario.scenario}</p>
+            <p className="stt-i3-role"><span>PLAYER {mockPlayer} ROLE</span>{mockPlayer === "A" ? mockPrepare.scenario.player_a_role : mockPrepare.scenario.player_b_role}</p>
+          </>}
+        </section>
         <div className="stt-test-actions">
           <button type="button" className="match-button" disabled={isListening} onClick={start}>
             START MIC

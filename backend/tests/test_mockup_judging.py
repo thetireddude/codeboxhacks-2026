@@ -42,6 +42,22 @@ class FakeJudge:
         )
 
 
+def test_mockup_round_prepare_returns_the_shared_scenario_contract():
+    app = create_app(TestConfig)
+    client = app.test_client()
+
+    response = client.get("/api/mockup/round-prepare")
+
+    assert response.status_code == 200
+    assert response.json["match_id"] == "mock-i3-scenario-match"
+    assert response.json["scenario"] == {
+        "tone": "wacky",
+        "scenario": "Two astronauts discover that neither knows how to land the spaceship.",
+        "player_a_role": "Overconfident captain",
+        "player_b_role": "Intern pretending to know what they are doing",
+    }
+
+
 def test_mockup_submit_judges_the_final_transcript_and_returns_arcade_result():
     app = create_app(TestConfig)
     fake_judge = FakeJudge()
