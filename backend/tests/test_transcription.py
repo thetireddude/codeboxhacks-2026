@@ -173,12 +173,24 @@ def test_final_speech_is_persisted_broadcast_and_changes_authoritative_turn():
     first_transcript = next(
         event for event in first_events if event["name"] == "transcript:event"
     )["args"][0]
+    first_partial = next(
+        event for event in first_events if event["name"] == "speech:partial"
+    )["args"][0]
     second_events = second_client.get_received()
     second_transcript = next(
         event for event in second_events if event["name"] == "transcript:event"
     )["args"][0]
+    second_partial = next(
+        event for event in second_events if event["name"] == "speech:partial"
+    )["args"][0]
 
     assert first_transcript == second_transcript
+    assert first_partial == second_partial == {
+        "match_id": match_id,
+        "player_id": "A",
+        "speech_id": "speech_live",
+        "text": "Hello",
+    }
     assert first_transcript["event"]["text"] == "Hello there"
     assert first_transcript["event"]["player_id"] == "A"
     assert next(

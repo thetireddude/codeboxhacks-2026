@@ -142,6 +142,21 @@ def _callbacks(
             except GameStateError as error:
                 _emit_transcription_error(socket_id, "ROUND_NOT_ACTIVE", str(error))
                 return
+            match = matchmaking_service.get_match_for_guest(context[1])
+            if match is None:
+                _emit_transcription_error(socket_id, "ROUND_NOT_ACTIVE", "Match is unavailable")
+                return
+            payload = {
+                "match_id": str(match.match_id),
+                "player_id": player_id,
+                "speech_id": speech_id,
+                "text": text,
+            }
+            for guest_id in (match.player_a_id, match.player_b_id):
+                guest = matchmaking_service.get_guest(guest_id)
+                if guest and guest.socket_id:
+                    socketio.emit("speech:partial", payload, to=guest.socket_id)
+            return
         socketio.emit(
             "speech:partial",
             {"player_id": player_id, "speech_id": speech_id, "text": text},
