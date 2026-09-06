@@ -286,6 +286,18 @@ button:not(.guest-banner button:first-of-type):active { box-shadow: inset 0 4px 
 .home-page .match-button { text-shadow: -1px 0 currentColor, 1px 0 currentColor; }
 @media (max-width: 560px) { .home-page .round-icon { height: 44px; top: 14px; width: 44px; }.home-page .round-icon--left { left: 14px; }.home-page .round-icon--right { right: 14px; } }
 .home-page .round-icon, .home-page .match-button { align-items: center; box-sizing: border-box; display: inline-flex; justify-content: center; line-height: 1; padding: 0; text-align: center; }.home-page .round-icon--right { padding-left: 1px; }.home-page .match-button { padding-inline: 34px; }
+
+/* Home rules: deliberately compact so it reads like an arcade instruction card. */
+.rules-button { --button-face: #267eaf; --button-light: #a9efff; --button-dark: #174a73; left: 14px; min-height: 36px; padding: 0 11px !important; position: absolute; top: 13px; z-index: 4; }
+.rules-overlay { align-items: center; background: rgba(5, 3, 18, .76); display: flex; inset: 0; justify-content: center; padding: 20px; position: absolute; z-index: 10; }
+.rules-card { background: repeating-linear-gradient(0deg, #110a29 0 4px, #170d36 4px 8px); border: 4px solid #80ddff; box-shadow: 0 0 0 5px #59228d, 10px 10px 0 #160928, 0 0 34px rgba(128,221,255,.4); color: #faf4ff; max-width: 590px; padding: 26px 28px 20px; position: relative; width: min(100%, 590px); }
+.rules-card > p, .rules-card small { color: #e1ff4f; display: block; font-family: var(--pixel-font); font-size: 7px; letter-spacing: .13em; text-align: center; }
+.rules-card h2 { color: #f187f1; font-family: var(--pixel-font); font-size: clamp(22px, 4vw, 36px); margin: 13px 0 19px; text-align: center; text-shadow: 3px 3px 0 #5b1978; }
+.rules-card ol { counter-reset: rules; list-style: none; margin: 0 0 18px; padding: 0; }
+.rules-card li { border-top: 1px solid rgba(128,221,255,.3); color: #ebe5f1; font-size: 12px; line-height: 1.45; padding: 9px 4px 9px 30px; position: relative; }
+.rules-card li::before { color: #80ddff; content: counter(rules); counter-increment: rules; font-family: var(--pixel-font); font-size: 9px; left: 4px; position: absolute; top: 12px; }.rules-card li b { color: #fff5a5; font-family: var(--pixel-font); font-size: 7px; }
+.rules-card__close { --button-face: #b83f8c; --button-light: #ffb4df; --button-dark: #6d174d; font-size: 20px !important; height: 30px; padding: 0 !important; position: absolute; right: 8px; top: 8px; width: 30px; }.rules-card__play { display: flex; margin: 0 auto 12px; min-height: 38px; padding-inline: 22px !important; }
+@media (max-width: 560px) { .rules-button { left: 14px; top: 14px; }.rules-card { padding: 24px 17px 17px; }.rules-card li { font-size: 11px; }.rules-card h2 { font-size: 25px; } }
 .video-tile--switched { animation: switch-camera-shake .42s cubic-bezier(.36,.07,.19,.97) both; }
 .video-tile--switched::after { animation: switch-damage-vignette 1.2s ease-out both; background: radial-gradient(ellipse at center, transparent 26%, rgba(108, 0, 0, .14) 49%, rgba(197, 0, 0, .76) 100%); content: ""; inset: 0; pointer-events: none; position: absolute; z-index: 2; }
 .switch-feedback { align-items: center; animation: switch-feedback-pop 1.2s cubic-bezier(.2,.85,.2,1) both; color: #fff5f5; display: flex; font-family: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif; font-size: clamp(34px, 5vw, 62px); inset: 0; justify-content: center; letter-spacing: .08em; pointer-events: none; position: absolute; text-shadow: 3px 3px 0 #790000, 0 0 18px #f20b0b; z-index: 3; }
