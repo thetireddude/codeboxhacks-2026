@@ -22,9 +22,6 @@ export function setSfxVolume(nextVolume) {
   } catch {
     // The current page still uses the selected volume for this session.
   }
-  if (musicGain && audioContext) {
-    musicGain.gain.setTargetAtTime(volume * 0.045, audioContext.currentTime, 0.02);
-  }
 }
 
 function getAudioContext() {
@@ -95,29 +92,4 @@ export function stopBackgroundMusic() {
   window.clearInterval(musicTimer);
   musicTimer = undefined;
   musicStep = 0;
-}
-
-function musicNote(context, frequency, startsAt, duration) {
-  const oscillator = context.createOscillator();
-  oscillator.type = "square";
-  oscillator.frequency.setValueAtTime(frequency, startsAt);
-  oscillator.connect(musicGain);
-  oscillator.start(startsAt);
-  oscillator.stop(startsAt + duration);
-}
-
-export function startBackgroundMusic() {
-  const context = getAudioContext();
-  if (!context || musicTimer) return;
-  musicGain = context.createGain();
-  musicGain.gain.setValueAtTime(volume * 0.045, context.currentTime);
-  musicGain.connect(context.destination);
-  const notes = [130.81, 164.81, 196, 164.81, 146.83, 174.61, 220, 174.61];
-  const beatSeconds = 0.24;
-  const playBar = () => {
-    const startsAt = context.currentTime + 0.04;
-    notes.forEach((note, index) => musicNote(context, note, startsAt + index * beatSeconds, 0.16));
-  };
-  playBar();
-  musicTimer = window.setInterval(playBar, notes.length * beatSeconds * 1000);
 }
