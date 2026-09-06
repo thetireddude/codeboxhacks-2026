@@ -51,6 +51,10 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
   const [transcript, setTranscript] = useState([]);
   const [partialTranscript, setPartialTranscript] = useState("");
   const [transcriptionStatus, setTranscriptionStatus] = useState("Waiting for the round to start.");
+  const [switchesRemaining, setSwitchesRemaining] = useState({ A: 0, B: 0 });
+  const [switchNotices, setSwitchNotices] = useState([]);
+  const [captureCycle, setCaptureCycle] = useState(0);
+  const [isSwitching, setIsSwitching] = useState(false);
 
   const localPlayer = match.player_id;
   const opponentPlayer = localPlayer === "A" ? "B" : "A";
@@ -77,6 +81,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
     const onStart = (payload) => {
       if (payload.match_id !== match.match_id) return;
       setRound(payload);
+      setSwitchesRemaining(payload.switches_remaining ?? { A: 0, B: 0 });
       setSecondsLeft(Math.max(0, Math.ceil((Date.parse(payload.started_at) + payload.duration_ms - Date.now()) / 1000)));
       setConnectionState("active");
       setCountdown(null);
@@ -86,9 +91,30 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       setRound((current) => current ? { ...current, active_player_id: payload.active_player_id } : current);
     };
     const onTranscriptEvent = (payload) => {
-      if (payload.match_id !== match.match_id || payload.event?.type !== "speech") return;
+      if (payload.match_id !== match.match_id) return;
+      if (payload.event?.type === "switch") {
+        setSwitchNotices((current) => [...current, payload.event]);
+        return;
+      }
+      if (payload.event?.type !== "speech") return;
       setTranscript((current) => current.some((line) => line.id === payload.event.id) ? current : [...current, payload.event]);
       setPartialTranscript("");
+    };
+    const onSwitchTriggered = (payload) => {
+      if (payload.match_id !== match.match_id) return;
+      setSwitchesRemaining(payload.switches_remaining);
+      setIsSwitching(false);
+      if (payload.event?.target_player_id === localPlayer) {
+        setPartialTranscript("");
+        setTranscriptionStatus("Switch received — starting your replacement response…");
+        setCaptureCycle((current) => current + 1);
+      }
+    };
+    const onSwitchRejected = (payload) => {
+      if (payload.match_id !== match.match_id) return;
+      setSwitchesRemaining(payload.switches_remaining ?? { A: 0, B: 0 });
+      setIsSwitching(false);
+      setErrorMessage(payload.message ?? "Switch was rejected.");
     };
     const onPartial = (payload) => {
       if (payload.player_id === localPlayer) setPartialTranscript(payload.text ?? "");
@@ -106,6 +132,8 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
     socket.on("turn:changed", onTurnChanged);
     socket.on("transcript:event", onTranscriptEvent);
     socket.on("speech:partial", onPartial);
+    socket.on("switch:triggered", onSwitchTriggered);
+    socket.on("switch:rejected", onSwitchRejected);
     socket.on("disconnect", onDisconnect);
     return () => {
       socket.off("round:prepare", onPrepare);
@@ -114,6 +142,8 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       socket.off("turn:changed", onTurnChanged);
       socket.off("transcript:event", onTranscriptEvent);
       socket.off("speech:partial", onPartial);
+      socket.off("switch:triggered", onSwitchTriggered);
+      socket.off("switch:rejected", onSwitchRejected);
       captureRef.current?.stop();
       captureRef.current = null;
       socket.off("disconnect", onDisconnect);
@@ -137,7 +167,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       captureRef.current?.stop();
       captureRef.current = null;
     };
-  }, [connectionState, guestId, localPlayer, match.match_id, round?.active_player_id, socket]);
+  }, [captureCycle, connectionState, guestId, localPlayer, match.match_id, round?.active_player_id, socket]);
 
   useEffect(() => {
     if (connectionState !== "countdown" || countdown === null || countdown <= 0) return undefined;
@@ -231,6 +261,20 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
     onLeave();
   };
 
+  const pressSwitch = () => {
+    if (isSwitching || connectionState !== "active" || round?.active_player_id === localPlayer) return;
+    setIsSwitching(true);
+    socket.emit("switch:press", {
+      match_id: match.match_id,
+      guest_id: guestId,
+      request_id: crypto.randomUUID(),
+    }, (response) => {
+      if (response?.ok) return;
+      setIsSwitching(false);
+      setErrorMessage(response?.code ? `Switch unavailable: ${response.code}` : "Switch was rejected.");
+    });
+  };
+
   const timerLabel = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}`;
 
   return (
@@ -278,12 +322,13 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
               {transcript.length === 0 && !partialTranscript && <p className="round-log__entry round-log__entry--round">LISTENING FOR THE FIRST LINE…</p>}
               {transcript.map((line) => <p key={line.id} className="round-log__entry"><strong>PLAYER {line.player_id}:</strong> {line.text}</p>)}
               {partialTranscript && <p className="round-log__entry round-log__entry--active"><strong>PLAYER {localPlayer}:</strong> {partialTranscript}</p>}
+              {switchNotices.map((event) => <p key={event.id} className="round-log__entry round-log__entry--switch">↯ PLAYER {event.from_player_id} SWITCHED PLAYER {event.target_player_id}</p>)}
             </div>
           </section>}
 
           {connectionState === "setup" && <div className="media-setup-actions"><button className="match-button media-permission-button" type="button" onClick={connectMedia}><span className="match-button__people">◉</span><span><strong>ENABLE CAMERA + MIC</strong><small>JOIN SECURE MEDIA ROOM</small></span></button></div>}
           {connectionState === "connecting" && <p className="media-connection" role="status"><i />CONNECTING SECURE MEDIA…</p>}
-          {["waiting", "countdown", "active", "ended"].includes(connectionState) && <div className="media-controls" aria-label="Media controls"><button type="button" className={devices.microphone ? "media-control media-control--active" : "media-control"} onClick={() => toggleDevice("microphone")}>{devices.microphone ? "◉" : "○"}<span>{devices.microphone ? "MUTE" : "UNMUTE"}</span></button><button type="button" className={devices.camera ? "media-control media-control--active" : "media-control"} onClick={() => toggleDevice("camera")}>{devices.camera ? "◉" : "○"}<span>{devices.camera ? "CAMERA ON" : "CAMERA OFF"}</span></button></div>}
+          {["waiting", "countdown", "active", "ended"].includes(connectionState) && <div className="media-controls" aria-label="Media controls"><button type="button" className={devices.microphone ? "media-control media-control--active" : "media-control"} onClick={() => toggleDevice("microphone")}>{devices.microphone ? "◉" : "○"}<span>{devices.microphone ? "MUTE" : "UNMUTE"}</span></button><button type="button" className={devices.camera ? "media-control media-control--active" : "media-control"} onClick={() => toggleDevice("camera")}>{devices.camera ? "◉" : "○"}<span>{devices.camera ? "CAMERA ON" : "CAMERA OFF"}</span></button>{connectionState === "active" && <button type="button" className="switch-button switch-button--live" disabled={isSwitching || round?.active_player_id === localPlayer || !switchesRemaining[localPlayer]} onClick={pressSwitch}>↯ SWITCH<small>{switchesRemaining[localPlayer]} LEFT</small></button>}</div>}
           {errorMessage && <p className="media-error" role="alert">{errorMessage}</p>}
           <p className="media-connection" role="status"><i />{connectionMessage(connectionState)}</p>
           {connectionState === "active" && <p className="media-connection"><i />{transcriptionStatus}</p>}
