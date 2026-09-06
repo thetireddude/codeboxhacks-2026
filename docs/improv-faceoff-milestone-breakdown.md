@@ -401,7 +401,7 @@ Build the arcade-style post-round experience.
 - Display Player A score
 - Display Player B score
 - Display Adaptability
-- Display Creativity
+- Display Articulation
 - Display Speed
 - Display Coherence
 - Display Collaboration / Scene Building
@@ -561,7 +561,7 @@ Judge the completed improv scene.
 ### Gemini Evaluates
 
 - Adaptability
-- Creativity
+- Articulation
 - Coherence
 - Collaboration / Scene Building
 - Switch recovery quality
@@ -1006,6 +1006,7 @@ gates; no additional P milestones are planned for this release.
 | Shared partial transcript | Complete | Polling-compatible transcript updates let the opponent see speech while it is still being spoken. |
 | Cloudflare realtime transport | Complete | The deployed path uses a polling-safe Socket.IO transport so tunnel/browser WebSocket upgrades do not block matchmaking or live updates. |
 | Scenario variety and two-player contract | Complete | Gemma 4 26B A4B generates scenarios through forced structured function calls while Gemini Flash remains the judge. Generation deterministically alternates asymmetric-subject and collective-subject slots, limiting `Two people ...` openings to at most half of accepted scenarios. Asymmetric scenes place two specific roles differently in a shared setting without requiring immediate interaction. Validation also rejects inactive third-character tasks and the recurring collective object-is-alive-or-food premise, while configurable coherence and uniqueness gates check every candidate. |
+| Public-speaking rubric v1 | Complete | Replaces Creativity with transcript-grounded Articulation, fixes six score anchors and 100-point increments, keeps Speed deterministic, forbids unsupported acoustic inference, and versions persisted scores as `public-speaking-v1` for future progress tracking. |
 | Judging resilience | Complete | Gemini judging is bounded, retains deterministic scoring fallback, logs safe failure context, and always releases the match from scoring. |
 | Switch presentation | Complete | Switch events are shared to both clients; the switched side receives the red vignette and `Switch!` popup. |
 | Arcade controls and audio | In progress | Pixel-style controls, persistent volume, button/Switch SFX, countdown/turn/round cues, and a lightweight quiz-game music loop are being finalized on the gameplay polish branch. |

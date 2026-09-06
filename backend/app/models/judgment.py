@@ -15,10 +15,10 @@ class SemanticCategoryPoints(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    adaptability: int = Field(ge=0, le=2000)
-    creativity: int = Field(ge=0, le=2000)
-    coherence: int = Field(ge=0, le=2000)
-    collaboration: int = Field(ge=0, le=2000)
+    adaptability: int = Field(ge=0, le=2000, multiple_of=100)
+    articulation: int = Field(ge=0, le=2000, multiple_of=100)
+    coherence: int = Field(ge=0, le=2000, multiple_of=100)
+    collaboration: int = Field(ge=0, le=2000, multiple_of=100)
 
 
 class JudgedPlayer(BaseModel):

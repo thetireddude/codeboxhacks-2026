@@ -88,7 +88,7 @@ class MatchIntegrationService:
     def _unavailable_judgment() -> JudgeResult:
         points = SemanticCategoryPoints(
             adaptability=0,
-            creativity=0,
+            articulation=0,
             coherence=0,
             collaboration=0,
         )

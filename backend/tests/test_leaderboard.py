@@ -14,7 +14,7 @@ def result(match_id, winner: str, a_score: int, b_score: int) -> MatchResults:
     def points(score: int) -> CategoryPoints:
         return CategoryPoints(
             adaptability=score,
-            creativity=0,
+            articulation=0,
             speed=0,
             coherence=0,
             collaboration=0,

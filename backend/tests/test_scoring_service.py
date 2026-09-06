@@ -14,10 +14,10 @@ MATCH_ID = UUID("3b241101-e2bb-4255-8caf-4136c566a962")
 JUDGMENT = {
     "player_a": {
         "category_points": {
-            "adaptability": 1920,
-            "creativity": 1760,
-            "coherence": 1650,
-            "collaboration": 1550,
+            "adaptability": 1900,
+            "articulation": 1800,
+            "coherence": 1700,
+            "collaboration": 1600,
         },
         "highlight": "Turned the upside-down manual into a captain's ritual.",
         "improvement": "Invite the intern into the landing decision earlier.",
@@ -25,9 +25,9 @@ JUDGMENT = {
     "player_b": {
         "category_points": {
             "adaptability": 1600,
-            "creativity": 1710,
-            "coherence": 1580,
-            "collaboration": 1550,
+            "articulation": 1700,
+            "coherence": 1600,
+            "collaboration": 1600,
         },
         "highlight": "Used the upside-down manual to raise the stakes.",
         "improvement": "Commit to a specific landing plan sooner.",
@@ -62,7 +62,7 @@ def test_merges_semantic_judgment_with_deterministic_speed_and_selects_winner():
 
     assert result.winner == "A"
     assert result.player_a.category_points.speed == 455
-    assert result.player_a.total_points == 7335
+    assert result.player_a.total_points == 7455
     assert result.player_b.category_points.speed == 0
     assert result.highlight_events[0].label == "GREAT RECOVERY"
 
