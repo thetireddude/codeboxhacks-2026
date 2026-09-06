@@ -80,3 +80,18 @@ def test_queue_rejects_guest_identity_from_a_different_socket():
     error = intruder.get_received()[-1]
     assert error["name"] == "match:error"
     assert error["args"][0]["code"] == "INVALID_PAYLOAD"
+
+
+def test_guest_identity_can_reconnect_after_its_socket_disconnects():
+    app = create_app(TestConfig)
+    first_client = socketio.test_client(app)
+    guest = _new_guest(first_client)
+
+    first_client.disconnect()
+    reconnecting_client = socketio.test_client(app)
+    response = reconnecting_client.emit(
+        "guest:create", {"guest_id": guest["guest_id"]}, callback=True
+    )
+
+    assert response["ok"] is True
+    assert response["guest"]["guest_id"] == guest["guest_id"]

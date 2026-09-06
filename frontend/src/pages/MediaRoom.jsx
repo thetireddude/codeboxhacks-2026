@@ -35,6 +35,7 @@ function connectionMessage(status) {
 export function MediaRoom({ match, guestId, socket, onLeave }) {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const remoteAudioRef = useRef(null);
   const roomRef = useRef(null);
   const [connectionState, setConnectionState] = useState("setup");
   const [errorMessage, setErrorMessage] = useState("");
@@ -56,6 +57,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
     room?.disconnect(true);
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
   };
 
   useEffect(() => {
@@ -131,6 +133,9 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
           attachTrack(track, remoteVideoRef.current);
           setHasRemoteVideo(true);
         }
+        if (track.kind === Track.Kind.Audio) {
+          attachTrack(track, remoteAudioRef.current);
+        }
       });
       room.on(RoomEvent.TrackUnsubscribed, (track) => {
         if (track.kind === Track.Kind.Video) setHasRemoteVideo(false);
@@ -146,11 +151,11 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       setHasLocalVideo(Boolean(cameraPublication?.track));
       setDevices({ camera: true, microphone: true });
 
+      setConnectionState("waiting");
       const ready = await new Promise((resolve) => {
         socket.emit("player:ready", { match_id: match.match_id, guest_id: guestId }, resolve);
       });
       if (!ready?.ok) throw new Error("The match server could not mark you ready.");
-      setConnectionState("waiting");
     } catch (error) {
       detachMedia();
       setHasLocalVideo(false);
@@ -211,10 +216,11 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
             </article>
             {connectionState === "countdown" && <div className="countdown-overlay" aria-live="assertive"><span>ROUND 1</span><b>{countdown || "GO!"}</b><small>THE SCENE STARTS NOW</small></div>}
           </div>
+          <audio ref={remoteAudioRef} autoPlay />
 
           {connectionState === "setup" && <div className="media-setup-actions"><button className="match-button media-permission-button" type="button" onClick={connectMedia}><span className="match-button__people">◉</span><span><strong>ENABLE CAMERA + MIC</strong><small>JOIN SECURE MEDIA ROOM</small></span></button></div>}
           {connectionState === "connecting" && <p className="media-connection" role="status"><i />CONNECTING SECURE MEDIA…</p>}
-          {["waiting", "countdown", "active"].includes(connectionState) && <div className="media-controls" aria-label="Media controls"><button type="button" className={devices.microphone ? "media-control media-control--active" : "media-control"} onClick={() => toggleDevice("microphone")}>{devices.microphone ? "◉" : "○"}<span>{devices.microphone ? "MUTE" : "UNMUTE"}</span></button><button type="button" className={devices.camera ? "media-control media-control--active" : "media-control"} onClick={() => toggleDevice("camera")}>{devices.camera ? "◉" : "○"}<span>{devices.camera ? "CAMERA ON" : "CAMERA OFF"}</span></button></div>}
+          {["waiting", "countdown", "active", "ended"].includes(connectionState) && <div className="media-controls" aria-label="Media controls"><button type="button" className={devices.microphone ? "media-control media-control--active" : "media-control"} onClick={() => toggleDevice("microphone")}>{devices.microphone ? "◉" : "○"}<span>{devices.microphone ? "MUTE" : "UNMUTE"}</span></button><button type="button" className={devices.camera ? "media-control media-control--active" : "media-control"} onClick={() => toggleDevice("camera")}>{devices.camera ? "◉" : "○"}<span>{devices.camera ? "CAMERA ON" : "CAMERA OFF"}</span></button></div>}
           {errorMessage && <p className="media-error" role="alert">{errorMessage}</p>}
           <p className="media-connection" role="status"><i />{connectionMessage(connectionState)}</p>
         </div>
