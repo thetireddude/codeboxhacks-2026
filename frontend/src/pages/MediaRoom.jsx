@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Room, RoomEvent, Track } from "livekit-client";
 import { startPcm16Capture } from "../services/pcm16Capture.js";
+import { playSwitchSfx } from "../services/arcadeSfx.js";
 
 function requestCredentials(socket, matchId) {
   return new Promise((resolve, reject) => {
@@ -73,6 +74,7 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
     if (!event?.id) return;
     if (handledSwitchEventIdsRef.current.has(event.id)) return;
     handledSwitchEventIdsRef.current.add(event.id);
+    playSwitchSfx();
     if (handledSwitchEventIdsRef.current.size > 100) {
       handledSwitchEventIdsRef.current.delete(handledSwitchEventIdsRef.current.values().next().value);
     }
