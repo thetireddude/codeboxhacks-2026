@@ -1305,6 +1305,11 @@ match-bound PCM16 stream for the active local player, displays that player's
 partial speech, and renders finalized authoritative transcript events for both
 participants.
 
+The I5 UI now exposes the authoritative active-speaker state and each player's
+remaining Switch inventory. A listener can send an idempotent `switch:press`,
+receive the server result, see the Switch in the shared transcript, and restart
+the interrupted speaker's local stream for the required replacement response.
+
 Production scenario preparation requires `GEMINI_API_KEY`: it no longer falls
 back to a hardcoded scene when credentials are absent. Deterministic scenarios
 remain only in automated-test and standalone mock-judging paths.

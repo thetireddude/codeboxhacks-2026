@@ -838,6 +838,17 @@ Player A starts replacement
 
 Automatic turns, mid-sentence Switches, and repeated Switches work live.
 
+### Current implementation status — Ready for two-browser validation
+
+The game UI now renders the server-owned active speaker, Switch inventory, and
+an enabled Switch control only for the listener. It sends idempotent
+`switch:press` requests, consumes accepted/rejected Switch payloads, displays
+Switch events in the transcript, and restarts the interrupted local PCM16
+stream for the required replacement response. Normal speech finalization
+continues to consume the authoritative `turn:changed` event. The remaining
+I5 completion check is a two-browser test covering automatic turns,
+mid-sentence Switches, and repeated Switches.
+
 ---
 
 ## Milestone I6 — Round End + Scoring Integration
