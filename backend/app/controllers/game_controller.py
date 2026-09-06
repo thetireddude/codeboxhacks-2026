@@ -75,14 +75,19 @@ def register_game_handlers(
                 )
             return {"ok": True, "state": match.state.value}
         except (GameStateError, ValueError) as error:
-            _emit_error("INVALID_PAYLOAD", str(error))
-            return {"ok": False}
+            error_payload = match_error_payload("INVALID_PAYLOAD", str(error))
+            _emit_error(**error_payload)
+            return {"ok": False, "error": error_payload}
         except ScenarioGenerationError as error:
-            _emit_error("SCENARIO_UNAVAILABLE", str(error))
-            return {"ok": False}
+            error_payload = match_error_payload("SCENARIO_UNAVAILABLE", str(error))
+            _emit_error(**error_payload)
+            return {"ok": False, "error": error_payload}
         except StorageUnavailableError:
-            _emit_error("STORAGE_UNAVAILABLE", "Game state is temporarily unavailable")
-            return {"ok": False}
+            error_payload = match_error_payload(
+                "STORAGE_UNAVAILABLE", "Game state is temporarily unavailable"
+            )
+            _emit_error(**error_payload)
+            return {"ok": False, "error": error_payload}
 
     @socketio.on("turn:complete")
     def complete_turn(payload: dict | None) -> dict:

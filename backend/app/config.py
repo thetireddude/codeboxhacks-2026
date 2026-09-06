@@ -132,6 +132,14 @@ class AppConfig:
     REDIS_KEY_PREFIX = os.getenv("REDIS_KEY_PREFIX", "improv-faceoff")
     USE_IN_MEMORY_REDIS = os.getenv("USE_IN_MEMORY_REDIS", "false").lower() == "true"
 
+    # Redis owns short-lived matchmaking state. Leaderboard scores are durable
+    # and intentionally use a separate relational database.
+    DATABASE_URL = os.getenv("DATABASE_URL", "")
+    LEADERBOARD_SCORING_VERSION = os.getenv("LEADERBOARD_SCORING_VERSION", "v1")
+    LEADERBOARD_AUTO_CREATE_SCHEMA = (
+        os.getenv("LEADERBOARD_AUTO_CREATE_SCHEMA", "false").lower() == "true"
+    )
+
     LIVEKIT_URL = os.getenv("LIVEKIT_URL", "")
     LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "")
     LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "")
