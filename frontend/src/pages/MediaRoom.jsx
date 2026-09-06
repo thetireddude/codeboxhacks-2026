@@ -45,11 +45,13 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
   const [countdown, setCountdown] = useState(null);
   const [round, setRound] = useState(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
+  const [scenario, setScenario] = useState(null);
 
   const localPlayer = match.player_id;
   const opponentPlayer = localPlayer === "A" ? "B" : "A";
   const opponentName = match.opponent?.display_name ?? "OPPONENT";
   const isInRound = connectionState === "countdown" || connectionState === "active";
+  const ownRole = scenario?.[localPlayer === "A" ? "player_a_role" : "player_b_role"];
 
   const detachMedia = () => {
     const room = roomRef.current;
@@ -63,6 +65,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
   useEffect(() => {
     const onPrepare = (payload) => {
       if (payload.match_id !== match.match_id) return;
+      setScenario(payload.scenario ?? null);
       setConnectionState("countdown");
       setCountdown(Math.max(0, Math.ceil((Date.parse(payload.starts_at) - Date.now()) / 1000)));
     };
@@ -202,6 +205,14 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
             {!isInRound && <h1>GET READY<br /><span>TO IMPROVISE.</span></h1>}
             {connectionState === "active" && <div className="round-timer"><span>TIME LEFT</span><b>{timerLabel}</b></div>}
           </div>
+
+          {scenario && isInRound && (
+            <section className="scenario-card" aria-label="Your improv scenario" aria-live="polite">
+              <div className="scenario-card__meta"><span>GEMINI SCENE DROP</span><b>{scenario.tone}</b></div>
+              <p className="scenario-card__prompt">{scenario.scenario}</p>
+              <div className="scenario-card__role"><span>YOUR ROLE · PLAYER {localPlayer}</span><strong>{ownRole}</strong></div>
+            </section>
+          )}
 
           <div className={`video-grid ${isInRound ? "game-video-grid" : ""}`}>
             <article className={`video-tile video-tile--local ${round?.active_player_id === localPlayer ? "video-tile--active" : ""}`}>
