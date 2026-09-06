@@ -33,7 +33,7 @@ function connectionMessage(status) {
 
 // I2 receives the real I1 match and persistent Socket.IO connection. I3-I6 own
 // scenario, transcript, Switch, and scoring integrations.
-export function MediaRoom({ match, guestId, socket, onLeave }) {
+export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const remoteAudioRef = useRef(null);
@@ -313,9 +313,27 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
     }
   };
 
+  const releaseCompletedMatch = (next) => {
+    if (connectionState !== "results") {
+      next();
+      return;
+    }
+    socket.emit("match:leave", { match_id: match.match_id, guest_id: guestId }, (response) => {
+      if (!response?.ok) {
+        setErrorMessage("Could not leave the completed match. Please try again.");
+        return;
+      }
+      detachMedia();
+      next();
+    });
+  };
+
   const leaveRoom = () => {
-    detachMedia();
-    onLeave();
+    releaseCompletedMatch(onLeave);
+  };
+
+  const findNextMatch = () => {
+    releaseCompletedMatch(onRequeue);
   };
 
   const canPressSwitch = connectionState === "active"
@@ -377,6 +395,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
               </article>;
             })}</div>
             {results.highlight_events.length > 0 && <div className="results-highlights"><strong>HIGHLIGHT REEL</strong>{results.highlight_events.map((event) => <span key={`${event.player_id}-${event.label}`}>PLAYER {event.player_id} · {event.label} +{event.points}</span>)}</div>}
+            <div className="queue-actions results-actions"><button className="match-button" type="button" onClick={findNextMatch}><span className="match-button__people">↻</span><span><strong>NEXT MATCH</strong><small>FIND ANOTHER OPPONENT</small></span></button><button className="cancel-link" type="button" onClick={leaveRoom}>EXIT TO HOME</button></div>
           </section> : <>
           <div className={`media-heading ${isInRound ? "media-heading--game" : ""}`}>
             <p>{isInRound ? "LIVE SCENE · ROUND 1" : "ROUND ONE · MEDIA CHECK"}</p>

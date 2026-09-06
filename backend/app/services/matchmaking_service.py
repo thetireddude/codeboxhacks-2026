@@ -69,6 +69,9 @@ class MatchmakingService:
     def get_guest(self, guest_id: UUID) -> Guest | None:
         return self._storage.get_guest(guest_id)
 
+    def get_match(self, match_id: UUID) -> MatchState | None:
+        return self._storage.get_match(match_id)
+
     def disconnect_guest(self, guest_id: UUID, socket_id: str) -> None:
         """Release a socket-bound guest identity so the same guest can reconnect."""
         guest = self._storage.get_guest(guest_id)
@@ -82,6 +85,23 @@ class MatchmakingService:
     def release_guest_match(self, guest_id: UUID) -> None:
         """Make a departed guest eligible for a future public match."""
         self._storage.release_guest_match(guest_id)
+
+    def leave_completed_match(
+        self, guest_id: UUID, socket_id: str, match_id: UUID
+    ) -> None:
+        """Release one guest after judging while retaining results for the opponent."""
+        guest = self._require_owned_guest(guest_id, socket_id)
+        match = self._storage.get_match_for_guest(guest_id)
+        if match is None or match.match_id != match_id:
+            raise MatchmakingError("Guest is not in this match")
+        if match.state not in (
+            MatchStatus.ROUND_END,
+            MatchStatus.SCORING,
+            MatchStatus.RESULTS,
+        ):
+            raise MatchmakingError("A match can only be left after the round ends")
+        self._storage.release_guest_match(guest_id)
+        self._save_guest(guest, GuestStatus.LOBBY)
 
     def _require_owned_guest(self, guest_id: UUID, socket_id: str) -> Guest:
         guest = self._storage.get_guest(guest_id)
@@ -123,6 +143,7 @@ class MatchmakingService:
             return
         for guest_id in (match.player_a_id, match.player_b_id):
             guest = self._storage.get_guest(guest_id)
-            if guest is not None:
+            active_match = self._storage.get_match_for_guest(guest_id)
+            if guest is not None and active_match is not None and active_match.match_id == match_id:
                 self._save_guest(guest, GuestStatus.LOBBY)
         self._storage.delete_match(match)

@@ -67,6 +67,22 @@ def register_matchmaking_handlers(
             _emit_error("STORAGE_UNAVAILABLE", "Matchmaking is temporarily unavailable")
             return {"ok": False}
 
+    @socketio.on("match:leave")
+    def leave_completed_match(payload: dict | None) -> dict:
+        try:
+            if not isinstance(payload, dict):
+                raise ValueError("payload must be an object")
+            guest_id = _required_uuid(payload)
+            match_id = UUID(str(payload["match_id"]))
+            service.leave_completed_match(guest_id, request.sid, match_id)
+            return {"ok": True}
+        except (KeyError, MatchmakingError, ValueError) as error:
+            _emit_error("INVALID_PAYLOAD", str(error))
+            return {"ok": False}
+        except StorageUnavailableError:
+            _emit_error("STORAGE_UNAVAILABLE", "Matchmaking is temporarily unavailable")
+            return {"ok": False}
+
 
 def _emit_match_found(service: MatchmakingService, match) -> None:
     player_a = service.get_guest(match.player_a_id)

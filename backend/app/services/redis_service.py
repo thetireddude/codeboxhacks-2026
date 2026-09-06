@@ -51,6 +51,21 @@ redis.call('SADD', members_key, guest_id)
 return { 'waiting' }
 """
 
+    _DELETE_MATCH_IF_CURRENT = """
+local match_key = KEYS[1]
+local player_a_match_key = KEYS[2]
+local player_b_match_key = KEYS[3]
+local match_id = ARGV[1]
+
+redis.call('DEL', match_key)
+if redis.call('GET', player_a_match_key) == match_id then
+  redis.call('DEL', player_a_match_key)
+end
+if redis.call('GET', player_b_match_key) == match_id then
+  redis.call('DEL', player_b_match_key)
+end
+"""
+
     def __init__(self, redis_url: str, key_prefix: str) -> None:
         self._client = Redis.from_url(redis_url, decode_responses=True)
         self._prefix = key_prefix
@@ -91,10 +106,13 @@ return { 'waiting' }
 
     def delete_match(self, match: MatchState) -> None:
         try:
-            self._client.delete(
+            self._client.eval(
+                self._DELETE_MATCH_IF_CURRENT,
+                3,
                 self._match_key(match.match_id),
                 f"{self._guest_match_prefix()}{match.player_a_id}",
                 f"{self._guest_match_prefix()}{match.player_b_id}",
+                str(match.match_id),
             )
         except RedisError as error:
             raise StorageUnavailableError("Redis is unavailable") from error
@@ -208,8 +226,10 @@ class InMemoryRedisService:
     def delete_match(self, match: MatchState) -> None:
         with self._lock:
             self._matches.pop(match.match_id, None)
-            self._guest_matches.pop(match.player_a_id, None)
-            self._guest_matches.pop(match.player_b_id, None)
+            if self._guest_matches.get(match.player_a_id) == match.match_id:
+                self._guest_matches.pop(match.player_a_id, None)
+            if self._guest_matches.get(match.player_b_id) == match.match_id:
+                self._guest_matches.pop(match.player_b_id, None)
 
     def claim_queue_slot(
         self, guest_id: UUID, match_id: UUID

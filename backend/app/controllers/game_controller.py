@@ -43,6 +43,7 @@ def register_game_handlers(
     transcript_service: TranscriptService | None = None,
     transcription_service: TranscriptionService | None = None,
     cleanup_delay_ms: int = 300_000,
+    result_disconnect_grace_ms: int = 5_000,
 ) -> None:
     @socketio.on("player:ready")
     def player_ready(payload: dict | None) -> dict:
@@ -232,6 +233,13 @@ def register_game_handlers(
                 match.match_id,
                 cleanup_delay_ms,
             )
+            if preserve_result_delivery:
+                socketio.start_background_task(
+                    _cleanup_retained_match_if_both_disconnected,
+                    matchmaking_service,
+                    match.match_id,
+                    result_disconnect_grace_ms,
+                )
         except (GameStateError, StorageUnavailableError, ValueError):
             return
 
@@ -363,6 +371,32 @@ def _cleanup_match_after_delay(
     socketio.sleep(cleanup_delay_ms / 1000)
     try:
         matchmaking_service.cleanup_match(match_id)
+    except StorageUnavailableError:
+        return
+
+
+def _cleanup_retained_match_if_both_disconnected(
+    matchmaking_service: MatchmakingService,
+    match_id: UUID,
+    result_disconnect_grace_ms: int,
+) -> None:
+    """Release an abandoned retained result without disrupting a reconnect."""
+    socketio.sleep(result_disconnect_grace_ms / 1000)
+    try:
+        match = matchmaking_service.get_match(match_id)
+        if match is None or match.state not in (
+            MatchStatus.ROUND_END,
+            MatchStatus.SCORING,
+            MatchStatus.RESULTS,
+        ):
+            return
+        players = (match.player_a_id, match.player_b_id)
+        if all(
+            (guest := matchmaking_service.get_guest(guest_id)) is None
+            or guest.socket_id is None
+            for guest_id in players
+        ):
+            matchmaking_service.cleanup_match(match_id)
     except StorageUnavailableError:
         return
 
