@@ -93,7 +93,7 @@ class ScenarioService:
         *,
         api_key: str,
         model: str = "gemma-4-26b-a4b-it",
-        max_attempts: int = 2,
+        max_attempts: int = 10,
         tone_pool: Sequence[Tone],
         prompt_template: str,
         role_blacklist: Sequence[str] = (),
@@ -310,24 +310,30 @@ class ScenarioService:
         """Use Gemini as a compact semantic gate after local contract checks."""
         if not self._quality_check_enabled:
             return
-        quality = self._generate_structured(
-            self._quality_prompt(scenario, asymmetric_slot),
-            {
-                "type": "OBJECT",
-                "properties": {
-                    "coherence_score": {"type": "INTEGER", "minimum": 1, "maximum": 10},
-                    "uniqueness_score": {"type": "INTEGER", "minimum": 1, "maximum": 10},
+        try:
+            quality = self._generate_structured(
+                self._quality_prompt(scenario, asymmetric_slot),
+                {
+                    "type": "OBJECT",
+                    "properties": {
+                        "coherence_score": {"type": "INTEGER", "minimum": 1, "maximum": 10},
+                        "uniqueness_score": {"type": "INTEGER", "minimum": 1, "maximum": 10},
+                    },
+                    "required": ["coherence_score", "uniqueness_score"],
                 },
-                "required": ["coherence_score", "uniqueness_score"],
-            },
-            "submit_scenario_quality",
-        )
+                "submit_scenario_quality",
+            )
+        except Exception:
+            # The scenario itself already passed deterministic safety, role,
+            # and repetition checks. A secondary evaluator outage must not
+            # cancel a live match.
+            return
         if not isinstance(quality, dict):
-            raise ValueError("Scenario quality response was not an object")
+            return
         coherence = quality.get("coherence_score")
         uniqueness = quality.get("uniqueness_score")
         if not isinstance(coherence, int) or not isinstance(uniqueness, int):
-            raise ValueError("Scenario quality response did not contain integer scores")
+            return
         if coherence < self._min_coherence_score:
             raise ValueError("Scenario coherence score was below the minimum")
         if uniqueness < self._min_uniqueness_score:
@@ -389,7 +395,7 @@ def create_scenario_service(config: Any) -> ScenarioService | MockScenarioServic
     return ScenarioService(
         api_key=_config_value(config, "GEMINI_API_KEY", ""),
         model=_config_value(config, "GEMINI_SCENARIO_MODEL", "gemma-4-26b-a4b-it"),
-        max_attempts=_config_value(config, "GEMINI_SCENARIO_MAX_ATTEMPTS", 2),
+        max_attempts=_config_value(config, "GEMINI_SCENARIO_MAX_ATTEMPTS", 10),
         tone_pool=_config_value(config, "GEMINI_SCENARIO_TONES", ()),
         prompt_template=_config_value(config, "GEMINI_SCENARIO_PROMPT_TEMPLATE", ""),
         role_blacklist=_config_value(config, "SCENARIO_ROLE_BLACKLIST", ()),

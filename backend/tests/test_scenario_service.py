@@ -38,11 +38,12 @@ class FakeClient:
         self.models = FakeModels(outcomes)
 
 
-def _service(outcomes, *, role_blacklist=()):
+def _service(outcomes, *, role_blacklist=(), max_attempts=2):
     return ScenarioService(
         api_key="test-key",
         model="gemini-3.1-flash-lite",
         client=FakeClient(outcomes),
+        max_attempts=max_attempts,
         tone_pool=(Tone.WACKY,),
         prompt_template="Create an improv scene in a {tone} tone.",
         role_blacklist=role_blacklist,
@@ -288,6 +289,52 @@ def test_quality_gate_retries_a_low_coherence_or_uniqueness_candidate():
     assert scenario.scenario == RETRY_SCENARIO["scenario"]
     assert len(service._client.models.calls) == 4
     assert "Uniqueness is judged independently" in service._client.models.calls[1]["contents"]
+
+
+def test_quality_evaluator_failure_does_not_cancel_a_valid_scene():
+    service = ScenarioService(
+        api_key="test-key",
+        model="gemini-3.1-flash-lite",
+        client=FakeClient([VALID_SCENARIO, RuntimeError("quality provider unavailable")]),
+        tone_pool=(Tone.WACKY,),
+        prompt_template="Create an improv scene in a {tone} tone.",
+        quality_check_enabled=True,
+        tone_selector=lambda _: Tone.WACKY,
+    )
+
+    assert service.generate_scenario().scenario == VALID_SCENARIO["scenario"]
+
+
+def test_quality_evaluator_malformed_response_does_not_cancel_a_valid_scene():
+    service = ScenarioService(
+        api_key="test-key",
+        model="gemini-3.1-flash-lite",
+        client=FakeClient([VALID_SCENARIO, {"unexpected": "response"}]),
+        tone_pool=(Tone.FUNNY,),
+        prompt_template="Create an improv scene in a {tone} tone.",
+        quality_check_enabled=True,
+        tone_selector=lambda _: Tone.FUNNY,
+    )
+
+    assert service.generate_scenario().scenario == VALID_SCENARIO["scenario"]
+
+
+def test_accepts_a_valid_tenth_candidate_after_nine_provider_failures():
+    service = _service(
+        [RuntimeError("temporary provider failure")] * 9 + [VALID_SCENARIO],
+        max_attempts=10,
+    )
+
+    assert service.generate_scenario().scenario == VALID_SCENARIO["scenario"]
+    assert len(service._client.models.calls) == 10
+
+
+def test_accepts_a_valid_tenth_candidate_after_nine_local_rejections():
+    invalid = {"tone": "funny", "scenario": "Incomplete"}
+    service = _service([invalid] * 9 + [VALID_SCENARIO], max_attempts=10)
+
+    assert service.generate_scenario().scenario == VALID_SCENARIO["scenario"]
+    assert len(service._client.models.calls) == 10
 
 
 def test_retries_when_the_player_roles_are_interchangeable():
