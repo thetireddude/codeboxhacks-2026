@@ -1,4 +1,4 @@
-"""Socket.IO handlers for the authoritative B2 game lifecycle."""
+"""Socket.IO handlers for the authoritative B2/B3 game lifecycle."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from uuid import UUID
 from flask import request
 
 from app import socketio
-from app.services.game_service import GameService, GameStateError
+from app.services.game_service import GameService, GameStateError, SwitchRejectedError
 from app.services.matchmaking_service import MatchmakingService
 from app.services.redis_service import StorageUnavailableError
 from app.views.socket_views import (
@@ -16,6 +16,8 @@ from app.views.socket_views import (
     round_end_payload,
     round_prepare_payload,
     round_start_payload,
+    switch_rejected_payload,
+    switch_triggered_payload,
     turn_changed_payload,
 )
 
@@ -78,6 +80,62 @@ def register_game_handlers(
         except StorageUnavailableError:
             _emit_error("STORAGE_UNAVAILABLE", "Game state is temporarily unavailable")
             return {"ok": False}
+
+    @socketio.on("switch:press")
+    def press_switch(payload: dict | None) -> dict:
+        match_id: UUID | None = None
+        request_id: str | None = None
+        try:
+            match_id, guest_id = _owned_match_payload(
+                payload, matchmaking_service, request.sid
+            )
+            request_id = _required_request_id(payload)
+            match, event, is_replay = game_service.press_switch(
+                match_id, guest_id, request_id
+            )
+            if not is_replay:
+                _emit_to_match(
+                    matchmaking_service,
+                    match,
+                    "switch:triggered",
+                    switch_triggered_payload(match, event, request_id),
+                )
+            return {
+                "ok": True,
+                "event": event.model_dump(mode="json"),
+                "switches_remaining": match.switches_remaining.model_dump(),
+                "replayed": is_replay,
+            }
+        except SwitchRejectedError as error:
+            _emit_switch_rejected(
+                matchmaking_service,
+                socket_guests,
+                match_id,
+                error.code,
+                str(error),
+                request_id,
+            )
+            return {"ok": False, "code": error.code}
+        except (GameStateError, ValueError) as error:
+            _emit_switch_rejected(
+                matchmaking_service,
+                socket_guests,
+                match_id,
+                "INVALID_PAYLOAD",
+                str(error),
+                request_id,
+            )
+            return {"ok": False, "code": "INVALID_PAYLOAD"}
+        except StorageUnavailableError:
+            _emit_switch_rejected(
+                matchmaking_service,
+                socket_guests,
+                match_id,
+                "STORAGE_UNAVAILABLE",
+                "Game state is temporarily unavailable",
+                request_id,
+            )
+            return {"ok": False, "code": "STORAGE_UNAVAILABLE"}
 
     @socketio.on("disconnect")
     def disconnect() -> None:
@@ -147,6 +205,12 @@ def _owned_match_payload(
     return match_id, guest_id
 
 
+def _required_request_id(payload: dict | None) -> str:
+    if not isinstance(payload, dict) or not isinstance(payload.get("request_id"), str):
+        raise ValueError("request_id is required")
+    return payload["request_id"]
+
+
 def _emit_to_match(
     matchmaking_service: MatchmakingService, match, event: str, payload: dict
 ) -> None:
@@ -167,3 +231,28 @@ def _elapsed_ms(match) -> int:
 
 def _emit_error(code: str, message: str) -> None:
     socketio.emit("match:error", match_error_payload(code, message), to=request.sid)
+
+
+def _emit_switch_rejected(
+    matchmaking_service: MatchmakingService,
+    socket_guests: dict[str, str],
+    match_id: UUID | None,
+    code: str,
+    message: str,
+    request_id: str | None,
+) -> None:
+    if match_id is None:
+        _emit_error(code, message)
+        return
+
+    inventory = {"A": 0, "B": 0}
+    guest_id_text = socket_guests.get(request.sid)
+    if guest_id_text:
+        match = matchmaking_service.get_match_for_guest(UUID(guest_id_text))
+        if match is not None:
+            inventory = match.switches_remaining.model_dump()
+    socketio.emit(
+        "switch:rejected",
+        switch_rejected_payload(match_id, code, message, request_id, inventory),
+        to=request.sid,
+    )

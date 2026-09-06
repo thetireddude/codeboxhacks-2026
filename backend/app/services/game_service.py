@@ -4,15 +4,30 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from threading import Lock
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from app.models import MatchResults, MatchState, MatchStatus, PlayerSlot, Scenario
+from app.models import (
+    MatchResults,
+    MatchState,
+    MatchStatus,
+    PlayerSlot,
+    Scenario,
+    SwitchEvent,
+)
 
 from .redis_service import RedisService
 
 
 class GameStateError(ValueError):
     """A requested game transition is not valid for the current match state."""
+
+
+class SwitchRejectedError(GameStateError):
+    """A Switch request failed a gameplay validation rule."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 class GameService:
@@ -86,6 +101,59 @@ class GameService:
             self._storage.save_match(match)
             return match
 
+    def press_switch(
+        self, match_id: UUID, guest_id: UUID, request_id: str
+    ) -> tuple[MatchState, SwitchEvent, bool]:
+        """Apply a listener Switch and return whether it was previously accepted."""
+        if not isinstance(request_id, str) or not request_id.strip():
+            raise SwitchRejectedError("INVALID_PAYLOAD", "request_id is required")
+
+        with self._lock:
+            match = self._require_match(match_id)
+            self._require_player(match, guest_id)
+            switching_player = self._slot_for_guest(match, guest_id)
+            existing_event = self._storage.get_switch_request(match_id, request_id)
+            if existing_event is not None:
+                if existing_event.from_player_id != switching_player:
+                    raise SwitchRejectedError(
+                        "DUPLICATE_REQUEST",
+                        "request_id was already used by the other player",
+                    )
+                return match, existing_event, True
+
+            if match.state != MatchStatus.ROUND_ACTIVE:
+                raise SwitchRejectedError("ROUND_NOT_ACTIVE", "Round is not active")
+
+            active_guest_id = self._guest_for_slot(match, match.active_player_id)
+            if guest_id == active_guest_id:
+                raise SwitchRejectedError(
+                    "NOT_LISTENER", "Only the listener can use a Switch"
+                )
+
+            remaining = getattr(match.switches_remaining, switching_player)
+            if remaining < 1:
+                raise SwitchRejectedError("NO_SWITCHES_REMAINING", "No Switches remain")
+
+            event = SwitchEvent(
+                type="switch",
+                id=f"switch_{uuid4().hex}",
+                from_player_id=switching_player,
+                target_player_id=match.active_player_id,
+                timestamp_ms=self._elapsed_ms(match),
+            )
+            inventory = match.switches_remaining.model_copy(
+                update={switching_player: remaining - 1}
+            )
+            match = match.model_copy(
+                update={
+                    "switches_remaining": inventory,
+                    "transcript_events": [*match.transcript_events, event],
+                }
+            )
+            self._storage.save_match(match)
+            self._storage.save_switch_request(match_id, request_id, event)
+            return match, event, False
+
     def end_round(self, match_id: UUID) -> MatchState:
         with self._lock:
             match = self._require_match(match_id)
@@ -150,3 +218,20 @@ class GameService:
         if slot == "B":
             return match.player_b_id
         raise GameStateError("Match has no active speaker")
+
+    @staticmethod
+    def _slot_for_guest(match: MatchState, guest_id: UUID) -> PlayerSlot:
+        if guest_id == match.player_a_id:
+            return "A"
+        if guest_id == match.player_b_id:
+            return "B"
+        raise GameStateError("Guest is not in this match")
+
+    @staticmethod
+    def _elapsed_ms(match: MatchState) -> int:
+        if match.round_started_at is None:
+            return 0
+        return max(
+            0,
+            int((datetime.now(UTC) - match.round_started_at).total_seconds() * 1000),
+        )

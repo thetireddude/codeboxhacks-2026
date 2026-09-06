@@ -10,7 +10,7 @@ from uuid import UUID
 from redis import Redis
 from redis.exceptions import RedisError
 
-from app.models import Guest, MatchState
+from app.models import Guest, MatchState, SwitchEvent
 
 
 class StorageUnavailableError(RuntimeError):
@@ -109,6 +109,18 @@ return { 'waiting' }
         except RedisError as error:
             raise StorageUnavailableError("Redis is unavailable") from error
 
+    def get_switch_request(self, match_id: UUID, request_id: str) -> SwitchEvent | None:
+        payload = self._get_json(self._switch_request_key(match_id, request_id))
+        return SwitchEvent.model_validate(payload) if payload else None
+
+    def save_switch_request(
+        self, match_id: UUID, request_id: str, event: SwitchEvent
+    ) -> None:
+        self._set_json(
+            self._switch_request_key(match_id, request_id),
+            event.model_dump(mode="json"),
+        )
+
     def _set_json(self, key: str, value: dict[str, Any]) -> None:
         try:
             self._client.set(key, json.dumps(value))
@@ -137,6 +149,9 @@ return { 'waiting' }
     def _queue_members_key(self) -> str:
         return f"{self._prefix}:queue:members"
 
+    def _switch_request_key(self, match_id: UUID, request_id: str) -> str:
+        return f"{self._prefix}:switch-request:{match_id}:{request_id}"
+
 
 class InMemoryRedisService:
     """Test-only implementation of the Redis service contract."""
@@ -147,6 +162,7 @@ class InMemoryRedisService:
         self._waiting: list[UUID] = []
         self._queued: set[UUID] = set()
         self._guest_matches: dict[UUID, UUID] = {}
+        self._switch_requests: dict[tuple[UUID, str], SwitchEvent] = {}
         self._lock = Lock()
 
     def connect(self) -> None:
@@ -193,3 +209,11 @@ class InMemoryRedisService:
                 return False
             self._queued.remove(guest_id)
             return True
+
+    def get_switch_request(self, match_id: UUID, request_id: str) -> SwitchEvent | None:
+        return self._switch_requests.get((match_id, request_id))
+
+    def save_switch_request(
+        self, match_id: UUID, request_id: str, event: SwitchEvent
+    ) -> None:
+        self._switch_requests[(match_id, request_id)] = event

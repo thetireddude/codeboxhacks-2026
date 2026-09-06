@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from app.models import Guest, MatchState
+from uuid import UUID
+
+from app.models import Guest, MatchState, SwitchEvent
 
 
 def match_found_payload(match: MatchState, player: Guest, opponent: Guest) -> dict:
@@ -52,6 +54,29 @@ def turn_changed_payload(match: MatchState, timestamp_ms: int) -> dict:
         "match_id": str(match.match_id),
         "active_player_id": match.active_player_id,
         "timestamp_ms": timestamp_ms,
+    }
+
+
+def switch_triggered_payload(
+    match: MatchState, event: SwitchEvent, request_id: str
+) -> dict:
+    return {
+        "match_id": str(match.match_id),
+        "event": event.model_dump(mode="json"),
+        "switches_remaining": match.switches_remaining.model_dump(),
+        "request_id": request_id,
+    }
+
+
+def switch_rejected_payload(
+    match_id: UUID, code: str, message: str, request_id: str | None, inventory: dict
+) -> dict:
+    return {
+        "match_id": str(match_id),
+        "code": code,
+        "message": message,
+        "request_id": request_id,
+        "switches_remaining": inventory,
     }
 
 
