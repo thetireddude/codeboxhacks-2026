@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { MediaRoom } from "./MediaRoom.jsx";
 
 const messages = {
   claim: "Guest accounts will connect here in a later milestone.",
@@ -33,6 +34,10 @@ export function HomePage() {
     setScreen("home");
   };
 
+  if (screen === "media") {
+    return <MediaRoom onLeave={returnHome} />;
+  }
+
   if (screen === "matchmaking") {
     const isFound = queueState === "found";
     const isError = queueState === "error";
@@ -66,7 +71,7 @@ export function HomePage() {
                 <h1>OPPONENT<br /><span>FOUND.</span></h1>
                 <p className="queue-copy">Player 7392 is ready to improvise. Your shared prompt is being prepared.</p>
                 <div className="found-card"><span>YOU</span><b>VS</b><span>PLAYER 7392</span></div>
-                <div className="queue-actions"><button className="match-button" type="button" onClick={() => setNotice("The game room is the next frontend milestone.")}><span className="match-button__people">♟♟♟</span><span><strong>CONTINUE</strong><small>GAME ROOM UP NEXT</small></span></button><button className="cancel-link" type="button" onClick={returnHome}>CANCEL MATCH</button></div>
+                <div className="queue-actions"><button className="match-button" type="button" onClick={() => setScreen("media")}><span className="match-button__people">♟♟♟</span><span><strong>CONTINUE</strong><small>CHECK CAMERA + MIC</small></span></button><button className="cancel-link" type="button" onClick={returnHome}>CANCEL MATCH</button></div>
               </>
             ) : (
               <>
