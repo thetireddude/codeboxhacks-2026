@@ -638,8 +638,8 @@ Two real browsers can find and enter the same match.
 
 Two separate browser sessions successfully connected to the backend, entered the
 public queue, and received the same match with opposite Player A/Player B
-assignments. The temporary Cloudflare Tunnel used for that remote test has been
-removed; it was test infrastructure only and is not part of the application.
+assignments. Any temporary public tunnel used for remote testing is test
+infrastructure only and is not part of the application.
 
 #### Implemented files and responsibilities
 
@@ -658,17 +658,16 @@ removed; it was test infrastructure only and is not part of the application.
 - `backend/app/views/socket_views.py` and `shared/events.md` — define the
   client-safe `match:found` payload and the shared realtime-event contract.
 
-#### Not implemented by I1
+#### Follow-on work after I1
 
-- The matched payload is not yet passed into the media/game UI. `MediaRoom`
-  still uses local mock player names, scenario data, timer, transcript, Switch,
-  and results state.
-- The frontend does not yet request LiveKit credentials, join a LiveKit room,
-  publish media, or display the remote participant. That is Milestone I2.
-- Reconnection/resume behavior after a browser refresh or network drop has not
-  been integrated into the active match flow.
-- The temporary remote-testing setup is intentionally not a deployment. A
-  permanent HTTPS frontend/backend deployment belongs to D1/D2.
+- I2 now passes the real matched-player context into `MediaRoom` and connects
+  the two clients through LiveKit.
+- Reconnection/resume behavior after a browser refresh or network drop is not
+  implemented for an active match. A brief Socket.IO reconnect can currently
+  leave a stale disconnect notice in the UI even after the connection recovers.
+- The temporary public-tunnel setup used for remote testing is test
+  infrastructure only. A permanent HTTPS frontend/backend deployment belongs
+  to D1/D2.
 
 ---
 
@@ -690,6 +689,40 @@ Backend LiveKit Token
 ### Done When
 
 Matched players can see and hear each other.
+
+### Current implementation status — Complete for real media integration
+
+Two remote browser clients have successfully matched, entered the same
+LiveKit room, and exchanged live camera and microphone media. The frontend
+uses the real match identity and Socket.IO connection from I1; it does not
+fall back to the former mock media room.
+
+#### Implemented
+
+- `HomePage` passes the real `match_id`, Player A/B slot, opponent identity,
+  guest identity, and persistent Socket.IO connection to `MediaRoom`.
+- `MediaRoom` requests `media:credentials`, joins the match-scoped LiveKit
+  room, publishes camera and microphone tracks, renders local/remote video,
+  and attaches remote audio to an autoplay audio element.
+- After local media is published, the client emits `player:ready`. Both clients
+  consume the authoritative `round:prepare`, `round:start`, and `round:end`
+  events; the countdown and timer derive from backend timestamps.
+- Camera and microphone controls remain available through the post-round
+  scoring-wait state.
+- I2 reliability fixes include remote audio attachment, a ready/countdown race
+  fix, releasing a departing guest's socket binding, and removing their old
+  guest-to-match index so the same anonymous guest can requeue.
+
+#### Not implemented by I2
+
+- Scenario and role presentation is not connected to the media/game UI (I3).
+- Live STT/transcript rendering, turn changes, and Switch UX are not connected
+  to the live media match (I4/I5).
+- Live judging, final score presentation, and `results:ready` rendering are
+  not connected to the frontend (I6).
+- Active-match reconnect/resume after a refresh or network interruption is not
+  supported. A production deployment with permanent HTTPS, managed Redis, and
+  WebSocket configuration remains D1/D2 work.
 
 ---
 

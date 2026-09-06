@@ -1280,6 +1280,25 @@ Add mandatory webcam/microphone permissions and real two-player media through Li
 
 Two matched remote browsers can see and hear one another in the same game screen.
 
+### Current implementation status — I2 complete
+
+The I2 media path is implemented and remotely verified: real matchmaking
+context reaches the media screen; each participant receives a match-scoped
+LiveKit token, publishes camera and microphone media, and receives the other
+participant's video and audio. The frontend emits `player:ready` only after
+local media setup, and follows backend `round:prepare`, `round:start`, and
+`round:end` events for the shared countdown and round clock.
+
+The implementation also keeps media controls available after round end and
+releases a disconnected guest's socket and old match index so that guest can
+return to the public queue.
+
+This does not complete the overall game loop: scenario display (Milestone 4 /
+I3), live transcript and turn/Switch wiring (Milestone 5 / I4-I5), and real
+score/result presentation (Milestone 6 / I6) remain separate integration work.
+Active-match reconnect/resume and permanent HTTPS hosting are also not yet
+implemented.
+
 ---
 
 ## Milestone 4 — Scenario Generation
