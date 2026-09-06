@@ -24,8 +24,9 @@ export function LeaderboardPage() {
 
   return (
     <main className="leaderboard-page">
-      <header className="guest-banner"><Link to="/">← LOBBY</Link><span>HIGH SCORE ARCADE</span></header>
+      <header className="guest-banner"><span>HIGH SCORE ARCADE</span></header>
       <section className="leaderboard-card" aria-labelledby="leaderboard-title">
+        <Link className="leaderboard-lobby" to="/">← LOBBY</Link>
         <div className="leaderboard-card__bolts" aria-hidden="true"><i /><i /><i /><i /></div>
         <div className="leaderboard-marquee">
           <p className="leaderboard-kicker">{state.sample ? "SAMPLE LEADERBOARD" : "LIVE LEADERBOARD"}</p>
