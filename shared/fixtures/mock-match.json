@@ -2,6 +2,7 @@
   "match_id": "3b241101-e2bb-4255-8caf-4136c566a962",
   "player_a_id": "94e983e1-8241-4f81-9d10-596c2a7b114d",
   "player_b_id": "b6118591-2c13-4c86-a6d7-394fbb0c8da1",
+  "ready_player_ids": [],
   "state": "ROUND_ACTIVE",
   "scenario": {
     "tone": "wacky",

@@ -37,6 +37,7 @@ class MatchState(BaseModel):
     match_id: UUID
     player_a_id: UUID
     player_b_id: UUID
+    ready_player_ids: list[UUID] = Field(default_factory=list, max_length=2)
     state: MatchStatus
     scenario: Scenario | None
     round_started_at: datetime | None

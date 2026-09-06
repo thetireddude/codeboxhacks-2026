@@ -27,3 +27,39 @@ def guest_created_payload(guest: Guest) -> dict:
         "guest_id": str(guest.guest_id),
         "display_name": guest.display_name,
     }
+
+
+def round_prepare_payload(match: MatchState, starts_at: str) -> dict:
+    return {
+        "match_id": str(match.match_id),
+        "scenario": match.scenario.model_dump(mode="json") if match.scenario else None,
+        "starts_at": starts_at,
+    }
+
+
+def round_start_payload(match: MatchState, duration_ms: int) -> dict:
+    return {
+        "match_id": str(match.match_id),
+        "started_at": match.round_started_at.isoformat(),
+        "duration_ms": duration_ms,
+        "active_player_id": match.active_player_id,
+        "switches_remaining": match.switches_remaining.model_dump(),
+    }
+
+
+def turn_changed_payload(match: MatchState, timestamp_ms: int) -> dict:
+    return {
+        "match_id": str(match.match_id),
+        "active_player_id": match.active_player_id,
+        "timestamp_ms": timestamp_ms,
+    }
+
+
+def round_end_payload(match: MatchState, ended_at: str) -> dict:
+    return {
+        "match_id": str(match.match_id),
+        "ended_at": ended_at,
+        "transcript_events": [
+            event.model_dump(mode="json") for event in match.transcript_events
+        ],
+    }
