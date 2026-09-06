@@ -88,7 +88,7 @@ export function HomePage() {
   };
 
   if (screen === "media") {
-    return <MediaRoom onLeave={returnHome} />;
+    return <MediaRoom match={match} guestId={guestIdRef.current} socket={socketRef.current} onLeave={returnHome} />;
   }
 
   if (screen === "matchmaking") {

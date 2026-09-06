@@ -69,6 +69,20 @@ class MatchmakingService:
     def get_guest(self, guest_id: UUID) -> Guest | None:
         return self._storage.get_guest(guest_id)
 
+    def disconnect_guest(self, guest_id: UUID, socket_id: str) -> None:
+        """Release a socket-bound guest identity so the same guest can reconnect."""
+        guest = self._storage.get_guest(guest_id)
+        if guest is not None and guest.socket_id == socket_id:
+            self._storage.save_guest(
+                guest.model_copy(
+                    update={"socket_id": None, "status": GuestStatus.DISCONNECTED}
+                )
+            )
+
+    def release_guest_match(self, guest_id: UUID) -> None:
+        """Make a departed guest eligible for a future public match."""
+        self._storage.release_guest_match(guest_id)
+
     def _require_owned_guest(self, guest_id: UUID, socket_id: str) -> Guest:
         guest = self._storage.get_guest(guest_id)
         if guest is None or guest.socket_id != socket_id:
