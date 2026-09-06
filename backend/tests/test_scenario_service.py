@@ -214,14 +214,14 @@ def test_asymmetric_slot_retries_a_generic_pair_subject():
     assert len(service._client.models.calls) == 2
 
 
-def test_retry_prompt_uses_a_different_required_opening_frame():
+def test_retry_prompt_uses_a_different_preferred_opening_frame():
     service = _service([{"tone": "wacky", "scenario": "Incomplete"}, RETRY_SCENARIO])
 
     service.generate_scenario()
 
     first_prompt = service._client.models.calls[0]["contents"]
     second_prompt = service._client.models.calls[1]["contents"]
-    assert "REQUIRED OPENING FRAME" in first_prompt
+    assert "PREFERRED OPENING FRAME" in first_prompt
     assert first_prompt != second_prompt
 
 

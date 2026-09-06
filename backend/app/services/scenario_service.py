@@ -261,9 +261,9 @@ class ScenarioService:
                 f"- {engine}",
                 "- Let the engine shape the relationship and immediate situation; do not repeat it verbatim.",
                 "",
-                "THIS ATTEMPT'S REQUIRED OPENING FRAME:",
+                "PREFERRED OPENING FRAME FOR THIS ATTEMPT:",
                 f"- {instruction}",
-                "- The scenario must use that exact opening form; do not mention these instructions in the JSON.",
+                "- Prefer this opening form to keep scenes varied, but a clear, natural opening that honors the two-player contract is valid.",
             )
         )
 
@@ -287,10 +287,8 @@ class ScenarioService:
         frame: tuple[str, tuple[str, ...], str],
         asymmetric_slot: bool,
     ) -> None:
-        frame_name, prefixes, _instruction = frame
+        frame_name, _prefixes, _instruction = frame
         opening = scenario.scenario.strip().lower()
-        if not opening.startswith(prefixes):
-            raise ValueError("Scenario did not follow this attempt's required opening frame")
         uses_generic_pair = ScenarioService._GENERIC_PAIR_SUBJECT_PATTERN.search(opening)
         if asymmetric_slot and uses_generic_pair:
             raise ValueError("Asymmetric scenario used a generic pair subject")
