@@ -4,6 +4,7 @@ import { io } from "socket.io-client";
 
 import { appConfig } from "../services/config.js";
 import { MediaRoom } from "./MediaRoom.jsx";
+import { ProgressModal } from "./ProgressModal.jsx";
 
 const messages = {
   claim: "Guest accounts will connect here in a later milestone.",
@@ -21,6 +22,7 @@ export function HomePage() {
   const [queueState, setQueueState] = useState("searching");
   const [match, setMatch] = useState(null);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [progressOpen, setProgressOpen] = useState(false);
   const socketRef = useRef(null);
   const guestIdRef = useRef(window.localStorage.getItem("improv-faceoff:guest-id"));
   const queueRequestRef = useRef(false);
@@ -448,7 +450,7 @@ export function HomePage() {
           <button className="match-button" type="button" onClick={startSearch}>FIND MATCH</button>
           <div className="home-actions">
             <button className="home-action home-action--gold" type="button" onClick={() => navigate("/leaderboard")}>RANKS</button>
-            <button className="home-action home-action--blue" type="button" onClick={() => handleClick("modes")}>MODES</button>
+            <button className="home-action home-action--blue" type="button" onClick={() => setProgressOpen(true)}>PROGRESS</button>
           </div>
           <p className="home-notice" role="status" aria-live="polite">{notice}</p>
         </section>
@@ -460,6 +462,7 @@ export function HomePage() {
           <div className="sticky-note">SAY<br />YES<br />AND...</div>
           <div className="plant plant--right"><i /><i /><i /><i /></div>
         </div>
+        <ProgressModal isOpen={progressOpen} onClose={() => setProgressOpen(false)} />
       </section>
     </main>
   );

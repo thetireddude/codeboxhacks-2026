@@ -18,6 +18,7 @@ from sqlalchemy import (
     Table,
     Text,
     and_,
+    asc,
     create_engine,
     desc,
     func,
@@ -246,7 +247,9 @@ class LeaderboardRepository:
             query = (
                 select(match_feedback)
                 .where(match_feedback.c.guest_id == str(guest_id))
-                .order_by(desc(match_feedback.c.created_at))
+                .order_by(
+                    asc(match_feedback.c.created_at), asc(match_feedback.c.match_id)
+                )
                 .limit(limit)
             )
             with self._engine.connect() as connection:
