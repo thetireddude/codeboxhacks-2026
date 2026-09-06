@@ -134,8 +134,9 @@ keeps progress loading fast and isolates it from ongoing AI configuration work.
 4. The custom tooltip displays every persisted feedback field: `match_id`,
    guest and scoring metadata, timestamp, total score, all skill points and
    ratings, AI overview, what went well, what to improve, and the complete raw
-   rubric log. Keyboard focus on a point presents the same information below
-   the chart for narrow screens.
+   rubric log. Its Recharts wrapper accepts pointer events so the tooltip can
+   be scrolled. Clicking or keyboard-focusing a point also pins the complete,
+   scrollable feedback record below the chart.
 5. Below the chart, an `AI COACH` panel renders the three persisted AI tips.
    It provides explicit loading and API-error states and never calls a model.
 6. Added a local `fallbackProgress` fixture containing clearly synthetic match

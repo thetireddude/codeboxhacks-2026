@@ -66,13 +66,14 @@ ProgressTooltip.propTypes = {
   payload: PropTypes.arrayOf(PropTypes.shape({ payload: matchShape })),
 };
 
-function PixelDot({ cx, cy, payload, onFocus }) {
+function PixelDot({ cx, cy, payload, onFocus, onSelect }) {
   if (!Number.isFinite(cx) || !Number.isFinite(cy)) return null;
   return (
     <rect
       aria-label={`Match ${payload.match_number}, score ${payload.total_score}`}
       className="progress-dot"
       height="10"
+      onClick={() => onSelect(payload)}
       onFocus={() => onFocus(payload)}
       role="button"
       tabIndex="0"
@@ -88,6 +89,7 @@ PixelDot.propTypes = {
   cy: PropTypes.number,
   payload: matchShape.isRequired,
   onFocus: PropTypes.func.isRequired,
+  onSelect: PropTypes.func.isRequired,
 };
 
 function CoachPanel({ summary, sample }) {
@@ -172,12 +174,12 @@ export function ProgressModal({ isOpen, onClose }) {
                   <CartesianGrid stroke="#5a3977" strokeDasharray="4 4" shapeRendering="crispEdges" />
                   <XAxis dataKey="match_number" axisLine={{ stroke: "#80ddff" }} label={{ value: "MATCH #", position: "insideBottom", offset: -2, fill: "#c8b6dc", fontSize: 8 }} stroke="#c8b6dc" tick={{ fontSize: 9, fill: "#f9e9ff" }} />
                   <YAxis axisLine={{ stroke: "#80ddff" }} tick={{ fontSize: 9, fill: "#f9e9ff" }} width={52} />
-                  <Tooltip content={<ProgressTooltip />} cursor={{ stroke: "#e1ff4f", strokeWidth: 2, shapeRendering: "crispEdges" }} />
-                  <Line dataKey="total_score" dot={<PixelDot onFocus={setFocusedMatch} />} isAnimationActive={false} stroke="#e1ff4f" strokeWidth={3} type="stepAfter" />
+                  <Tooltip content={<ProgressTooltip />} cursor={{ stroke: "#e1ff4f", strokeWidth: 2, shapeRendering: "crispEdges" }} wrapperStyle={{ pointerEvents: "auto" }} />
+                  <Line dataKey="total_score" dot={<PixelDot onFocus={setFocusedMatch} onSelect={setFocusedMatch} />} isAnimationActive={false} stroke="#e1ff4f" strokeWidth={3} type="stepAfter" />
                 </LineChart>
               </ResponsiveContainer>
             </div>
-            <p className="progress-chart-card__hint">HOVER A PIXEL FOR THE FULL MATCH FEEDBACK · TAB A PIXEL FOR A FOCUS VIEW</p>
+            <p className="progress-chart-card__hint">HOVER A PIXEL FOR FULL MATCH FEEDBACK · CLICK OR TAB A PIXEL TO PIN A SCROLLABLE FOCUS VIEW</p>
           </section>
           {focusedMatch && <section className="progress-focus-detail" aria-live="polite"><FeedbackDetail match={focusedMatch} /></section>}
           <CoachPanel sample={state.sample} summary={state.summary} />
