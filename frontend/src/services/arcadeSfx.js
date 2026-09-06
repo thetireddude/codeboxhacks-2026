@@ -1,8 +1,8 @@
 let audioContext;
-let musicGain;
 let musicTimer;
+let musicStep = 0;
 const VOLUME_STORAGE_KEY = "improv-faceoff-sfx-volume";
-let volume = 0.7;
+let volume = 0.85;
 
 try {
   const savedVolume = Number(window.localStorage.getItem(VOLUME_STORAGE_KEY));
@@ -50,13 +50,51 @@ function tone(frequency, duration, type = "square", volume = 0.035, delay = 0) {
 }
 
 export function playButtonSfx() {
-  tone(520, 0.055, "square", 0.025);
-  tone(780, 0.07, "square", 0.018, 0.035);
+  tone(520, 0.055, "square", 0.045);
+  tone(780, 0.07, "square", 0.032, 0.035);
 }
 
 export function playSwitchSfx() {
-  tone(180, 0.16, "sawtooth", 0.045);
-  tone(95, 0.24, "square", 0.035, 0.07);
+  tone(180, 0.16, "sawtooth", 0.075);
+  tone(95, 0.24, "square", 0.06, 0.07);
+}
+
+export function playCountdownSfx() {
+  tone(660, 0.07, "square", 0.055);
+}
+
+export function playTurnChangeSfx() {
+  tone(440, 0.06, "square", 0.05);
+  tone(660, 0.09, "square", 0.042, 0.06);
+}
+
+export function playRoundEndSfx() {
+  tone(523, 0.12, "square", 0.06);
+  tone(392, 0.13, "square", 0.052, 0.1);
+  tone(262, 0.2, "sawtooth", 0.045, 0.2);
+}
+
+const MUSIC_MELODY = [523, 659, 784, 659, 587, 740, 880, 740, 523, 659, 784, 988, 880, 784, 659, 587];
+const MUSIC_BASS = [131, 131, 147, 147, 165, 165, 147, 147];
+
+function playMusicStep() {
+  const step = musicStep % MUSIC_MELODY.length;
+  tone(MUSIC_MELODY[step], 0.13, "square", 0.028);
+  if (step % 2 === 0) tone(MUSIC_BASS[(step / 2) % MUSIC_BASS.length], 0.16, "triangle", 0.035);
+  musicStep += 1;
+}
+
+export function startBackgroundMusic() {
+  if (musicTimer || getSfxVolume() === 0) return;
+  playMusicStep();
+  musicTimer = window.setInterval(playMusicStep, 180);
+}
+
+export function stopBackgroundMusic() {
+  if (!musicTimer) return;
+  window.clearInterval(musicTimer);
+  musicTimer = undefined;
+  musicStep = 0;
 }
 
 function musicNote(context, frequency, startsAt, duration) {

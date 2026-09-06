@@ -807,7 +807,7 @@ Microphone
 
 Live speech appears correctly for both players.
 
-### Current implementation status — Implemented, awaiting two-browser validation
+### Current implementation status — Complete
 
 The live media screen now starts an authoritative PCM16 transcription stream
 only while its local player owns the active turn. It sends the match and guest
@@ -815,7 +815,8 @@ identity with `transcription:start`, renders local partial speech immediately,
 and renders each finalized `transcript:event` received by either player.
 Turn-change events update the active-speaker display and stop the prior local
 stream. The remaining I4 completion check is remote two-browser validation
-with Deepgram credentials and the I2 tunnel setup.
+with Deepgram credentials and the I2 tunnel setup. Remote testing subsequently
+confirmed the shared live transcript path.
 
 ---
 
@@ -862,7 +863,7 @@ Player A starts replacement
 
 Automatic turns, mid-sentence Switches, and repeated Switches work live.
 
-### Current implementation status — Ready for two-browser validation
+### Current implementation status — Complete
 
 The game UI now renders the server-owned active speaker, Switch inventory, and
 an enabled Switch control only for the listener. It sends idempotent
@@ -875,7 +876,8 @@ mid-sentence Switches, and repeated Switches.
 The default turn-end silence window is 900 ms (within the 700–1200 ms
 playtesting range) so the listener has a meaningful opportunity to Switch
 before a normal response finalizes; it remains configurable through
-`TURN_END_SILENCE_MS`.
+`TURN_END_SILENCE_MS`. Switch notifications are delivered to both clients,
+with the red vignette and popup shown on the switched player's side.
 
 ---
 
@@ -904,7 +906,7 @@ Connect round completion to real judging and results.
 
 Both players receive the same final arcade result.
 
-### Current implementation status — Ready for two-browser validation
+### Current implementation status — Complete
 
 The media screen now transitions from the authoritative `round:end` event to
 a judging state, then renders the `results:ready` payload for both players.
@@ -914,7 +916,9 @@ reel. The result is retained for the existing short cleanup window: if a
 player transiently reconnects while Gemini is judging, the restored guest
 binding receives the same authoritative `results:ready` payload. The remaining
 I6 completion check is a real two-browser round using Gemini judging to confirm
-both clients receive and render the same payload.
+both clients receive and render the same payload. Gemini failures remain
+bounded and produce an explicit unavailable result rather than hanging the
+round.
 If Gemini fails in the background judging task, both players now receive a
 clear `JUDGING_UNAVAILABLE` match error and the match is scheduled for cleanup
 instead of remaining indefinitely in the scoring state.
@@ -945,6 +949,12 @@ Deploy the complete application.
 ### Done When
 
 The public application loads and all external services connect.
+
+### Current implementation status — Complete
+
+The deployed frontend and backend are reachable over HTTPS through Cloudflare,
+with the public backend health/readiness checks passing and the frontend built
+against the public backend URL.
 
 ---
 
@@ -977,6 +987,27 @@ Verify the full game works between two separate computers.
 ### Done When
 
 One complete remote match succeeds without developer intervention.
+
+### Current implementation status — Complete
+
+Remote two-browser testing covered matchmaking, media, live transcript,
+Switches, round end, judging/fallback behavior, and synchronized results.
+
+---
+
+# Post-MVP Patch Track
+
+These are shipped reliability and presentation fixes applied after the core
+milestones. They are tracked here instead of introducing separate `P` milestone
+gates; no additional P milestones are planned for this release.
+
+| Patch | Status | Summary |
+|---|---|---|
+| Shared partial transcript | Complete | Polling-compatible transcript updates let the opponent see speech while it is still being spoken. |
+| Cloudflare realtime transport | Complete | The deployed path uses a polling-safe Socket.IO transport so tunnel/browser WebSocket upgrades do not block matchmaking or live updates. |
+| Judging resilience | Complete | Gemini judging is bounded, retains deterministic scoring fallback, logs safe failure context, and always releases the match from scoring. |
+| Switch presentation | Complete | Switch events are shared to both clients; the switched side receives the red vignette and `Switch!` popup. |
+| Arcade controls and audio | In progress | Pixel-style controls, persistent volume, button/Switch SFX, countdown/turn/round cues, and a lightweight quiz-game music loop are being finalized on the gameplay polish branch. |
 
 ---
 
