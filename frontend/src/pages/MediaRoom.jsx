@@ -55,6 +55,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
   const [switchNotices, setSwitchNotices] = useState([]);
   const [captureCycle, setCaptureCycle] = useState(0);
   const [isSwitching, setIsSwitching] = useState(false);
+  const [results, setResults] = useState(null);
 
   const localPlayer = match.player_id;
   const opponentPlayer = localPlayer === "A" ? "B" : "A";
@@ -124,11 +125,17 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       setRound((current) => current ? { ...current, ended: true } : current);
       setConnectionState("ended");
     };
+    const onResultsReady = (payload) => {
+      if (payload.match_id !== match.match_id) return;
+      setResults(payload.results ?? null);
+      setConnectionState("results");
+    };
     const onDisconnect = () => setErrorMessage("The match server disconnected. Leave and find a new match.");
 
     socket.on("round:prepare", onPrepare);
     socket.on("round:start", onStart);
     socket.on("round:end", onEnd);
+    socket.on("results:ready", onResultsReady);
     socket.on("turn:changed", onTurnChanged);
     socket.on("transcript:event", onTranscriptEvent);
     socket.on("speech:partial", onPartial);
@@ -139,6 +146,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       socket.off("round:prepare", onPrepare);
       socket.off("round:start", onStart);
       socket.off("round:end", onEnd);
+      socket.off("results:ready", onResultsReady);
       socket.off("turn:changed", onTurnChanged);
       socket.off("transcript:event", onTranscriptEvent);
       socket.off("speech:partial", onPartial);
@@ -276,17 +284,32 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
   };
 
   const timerLabel = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}`;
+  const resultFor = (player) => player === "A" ? results?.player_a : results?.player_b;
 
   return (
     <main className="media-page">
       <header className="guest-banner">
         <span className="guest-banner__spark">✦</span>
-        <span>{isInRound ? "Round 1 · Live media connected." : "Media check · your camera and microphone stay in your control."}</span>
+        <span>{connectionState === "results" ? "Round complete · final arcade results." : isInRound ? "Round 1 · Live media connected." : "Media check · your camera and microphone stay in your control."}</span>
         <button className="guest-banner__claim" type="button" onClick={leaveRoom}>LEAVE</button>
       </header>
       <section className={`media-room ${isInRound ? "media-room--game" : ""}`} aria-label="Camera and microphone setup">
         <button className="round-icon round-icon--left" type="button" onClick={leaveRoom} aria-label="Leave media setup">×</button>
-        <div className={isInRound ? "game-stage" : "media-stage"}>
+        <div className={isInRound || connectionState === "results" ? "game-stage" : "media-stage"}>
+          {connectionState === "results" && results ? <section className="results-screen" aria-live="polite">
+            <p className="stt-test-label">FINAL ARCADE RESULTS</p>
+            <h1>{results.winner === "TIE" ? "TIE GAME" : `PLAYER ${results.winner} WINS`}</h1>
+            <p className="results-screen__subtitle">GEMINI JUDGED THE FINAL TRANSCRIPT</p>
+            <div className="results-grid">{["A", "B"].map((player) => {
+              const playerResult = resultFor(player);
+              return <article key={player} className={`results-player ${results.winner === player ? "results-player--winner" : ""}`}>
+                <p>PLAYER {player}{player === localPlayer ? " · YOU" : ""}</p><b>{playerResult.total_points.toLocaleString()}</b>
+                <div className="results-categories">{Object.entries(playerResult.category_points).map(([category, points]) => <span key={category}>{category} <strong>{points}</strong></span>)}</div>
+                <p><strong>BEST MOMENT</strong>{playerResult.highlight}</p><p><strong>TRY NEXT</strong>{playerResult.improvement}</p>
+              </article>;
+            })}</div>
+            {results.highlight_events.length > 0 && <div className="results-highlights"><strong>HIGHLIGHT REEL</strong>{results.highlight_events.map((event) => <span key={`${event.player_id}-${event.label}`}>PLAYER {event.player_id} · {event.label} +{event.points}</span>)}</div>}
+          </section> : <>
           <div className={`media-heading ${isInRound ? "media-heading--game" : ""}`}>
             <p>{isInRound ? "LIVE SCENE · ROUND 1" : "ROUND ONE · MEDIA CHECK"}</p>
             {!isInRound && <h1>GET READY<br /><span>TO IMPROVISE.</span></h1>}
@@ -332,6 +355,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
           {errorMessage && <p className="media-error" role="alert">{errorMessage}</p>}
           <p className="media-connection" role="status"><i />{connectionMessage(connectionState)}</p>
           {connectionState === "active" && <p className="media-connection"><i />{transcriptionStatus}</p>}
+          </>}
         </div>
       </section>
     </main>

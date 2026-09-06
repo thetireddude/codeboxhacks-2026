@@ -876,6 +876,15 @@ Connect round completion to real judging and results.
 
 Both players receive the same final arcade result.
 
+### Current implementation status — Ready for two-browser validation
+
+The media screen now transitions from the authoritative `round:end` event to
+a judging state, then renders the `results:ready` payload for both players.
+The result view displays winner/tie status, both final totals, every arcade
+category, each player's best moment and improvement, and the shared highlight
+reel. The remaining I6 completion check is a real two-browser round using
+Gemini judging to confirm both clients receive and render the same payload.
+
 ---
 
 # Deployment Track — All Developers

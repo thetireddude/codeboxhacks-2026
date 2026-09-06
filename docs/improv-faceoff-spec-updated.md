@@ -1310,6 +1310,12 @@ remaining Switch inventory. A listener can send an idempotent `switch:press`,
 receive the server result, see the Switch in the shared transcript, and restart
 the interrupted speaker's local stream for the required replacement response.
 
+The I6 screen now waits after the server's `round:end` event while Gemini
+judges the final transcript, then renders the shared `results:ready` payload:
+winner or tie, both arcade totals and category scores, player coaching, and
+highlight events. It awaits a real two-browser Gemini judging run for final
+integration validation.
+
 Production scenario preparation requires `GEMINI_API_KEY`: it no longer falls
 back to a hardcoded scene when credentials are absent. Deterministic scenarios
 remain only in automated-test and standalone mock-judging paths.
