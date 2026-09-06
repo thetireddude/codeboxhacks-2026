@@ -49,15 +49,31 @@ class AppConfig:
         Tone.SAD,
     )
     GEMINI_SCENARIO_PROMPT_TEMPLATE = (
-        "Create an original, brief improv scene starter in a {tone} tone. Should be no more than 12 words.\n\n"
+        "Create an original, brief improv scene starter in a {tone} tone. "
+        "Should be no more than 12 words.\n\n"
         "Give both performers distinct, complementary roles with an immediate "
-        "relationship or tension. The setup must be playable and readable immediately in a "
+        "relationship or tension. The setup must be playable and readable "
+        "immediately in a "
         "short two-person scene.\n\n"
         "Do not use real people, copyrighted characters, slurs, sexual content, "
         "graphic violence, illegal instructions, or stereotypes about protected "
         "groups. Do not include a winner, scoring instruction, Switch rule, or "
         "gameplay modifier."
     )
+
+    STT_PROVIDER = os.getenv("STT_PROVIDER") or "deepgram"
+    DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")
+    DEEPGRAM_MODEL = os.getenv("DEEPGRAM_MODEL") or "flux-general-en"
+    STT_SAMPLE_RATE = _as_int("STT_SAMPLE_RATE", 16_000)
+    STT_CHUNK_MS = _as_int("STT_CHUNK_MS", 80)
+    # This hook lets tests replace the network-backed session with a fake.
+    TRANSCRIPTION_SESSION_FACTORY = None
+
     REDIS_URL = os.getenv("REDIS_URL") or "redis://localhost:6379/0"
     REDIS_KEY_PREFIX = os.getenv("REDIS_KEY_PREFIX", "improv-faceoff")
     USE_IN_MEMORY_REDIS = os.getenv("USE_IN_MEMORY_REDIS", "false").lower() == "true"
+
+    LIVEKIT_URL = os.getenv("LIVEKIT_URL", "")
+    LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "")
+    LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "")
+    LIVEKIT_TOKEN_TTL_SECONDS = _as_int("LIVEKIT_TOKEN_TTL_SECONDS", 3_600)

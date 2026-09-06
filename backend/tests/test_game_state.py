@@ -13,14 +13,18 @@ class FastRoundConfig(AppConfig):
     ROUND_DURATION_MS = 80
 
 
+class SwitchRoundConfig(FastRoundConfig):
+    ROUND_DURATION_MS = 1_000
+
+
 def _new_guest(client):
     response = client.emit("guest:create", {}, callback=True)
     assert response["ok"] is True
     return response["guest"]
 
 
-def _paired_clients():
-    app = create_app(FastRoundConfig)
+def _paired_clients(config=FastRoundConfig):
+    app = create_app(config)
     first_client = socketio.test_client(app)
     second_client = socketio.test_client(app)
     first_guest = _new_guest(first_client)
@@ -140,3 +144,115 @@ def test_disconnect_stops_an_active_round_and_notifies_opponent():
     disconnected = _wait_for(second_client, "player:disconnected")
     assert disconnected["player_id"] == "A"
     _wait_for_state(app, second_guest["guest_id"], MatchStatus.ROUND_END)
+
+
+def test_listener_switches_are_broadcast_repeatable_and_idempotent():
+    (
+        app,
+        first_client,
+        second_client,
+        first_guest,
+        second_guest,
+        match_id,
+    ) = _paired_clients(SwitchRoundConfig)
+    first_client.emit(
+        "player:ready",
+        {"match_id": match_id, "guest_id": first_guest["guest_id"]},
+        callback=True,
+    )
+    second_client.emit(
+        "player:ready",
+        {"match_id": match_id, "guest_id": second_guest["guest_id"]},
+        callback=True,
+    )
+    _wait_for(first_client, "round:start")
+    second_client.get_received()
+
+    first_switch = second_client.emit(
+        "switch:press",
+        {
+            "match_id": match_id,
+            "guest_id": second_guest["guest_id"],
+            "request_id": "switch-request-1",
+        },
+        callback=True,
+    )
+    assert first_switch["ok"] is True
+    assert first_switch["replayed"] is False
+    assert first_switch["event"]["from_player_id"] == "B"
+    assert first_switch["event"]["target_player_id"] == "A"
+    assert first_switch["switches_remaining"] == {"A": 5, "B": 4}
+    assert _wait_for(first_client, "switch:triggered")["event"] == first_switch["event"]
+
+    replay = second_client.emit(
+        "switch:press",
+        {
+            "match_id": match_id,
+            "guest_id": second_guest["guest_id"],
+            "request_id": "switch-request-1",
+        },
+        callback=True,
+    )
+    assert replay["ok"] is True
+    assert replay["replayed"] is True
+    assert replay["event"] == first_switch["event"]
+    assert replay["switches_remaining"] == {"A": 5, "B": 4}
+
+    owner_attempt = first_client.emit(
+        "switch:press",
+        {
+            "match_id": match_id,
+            "guest_id": first_guest["guest_id"],
+            "request_id": "owner-request",
+        },
+        callback=True,
+    )
+    assert owner_attempt == {"ok": False, "code": "NOT_LISTENER"}
+    assert _wait_for(first_client, "switch:rejected")["code"] == "NOT_LISTENER"
+
+    for request_number in range(2, 6):
+        response = second_client.emit(
+            "switch:press",
+            {
+                "match_id": match_id,
+                "guest_id": second_guest["guest_id"],
+                "request_id": f"switch-request-{request_number}",
+            },
+            callback=True,
+        )
+        assert response["ok"] is True
+
+    exhausted = second_client.emit(
+        "switch:press",
+        {
+            "match_id": match_id,
+            "guest_id": second_guest["guest_id"],
+            "request_id": "switch-request-6",
+        },
+        callback=True,
+    )
+    assert exhausted == {"ok": False, "code": "NO_SWITCHES_REMAINING"}
+    assert _wait_for(second_client, "switch:rejected")["switches_remaining"] == {
+        "A": 5,
+        "B": 0,
+    }
+
+    match = app.extensions["matchmaking_service"].get_match_for_guest(
+        UUID(first_guest["guest_id"])
+    )
+    assert match.active_player_id == "A"
+    assert len(match.transcript_events) == 5
+    assert all(event.type == "switch" for event in match.transcript_events)
+
+    _wait_for(first_client, "round:end", timeout_seconds=2)
+    after_round = second_client.emit(
+        "switch:press",
+        {
+            "match_id": match_id,
+            "guest_id": second_guest["guest_id"],
+            "request_id": "after-round-request",
+        },
+        callback=True,
+    )
+    assert after_round == {"ok": False, "code": "ROUND_NOT_ACTIVE"}
+    assert _wait_for(second_client, "switch:rejected")["code"] == "ROUND_NOT_ACTIVE"

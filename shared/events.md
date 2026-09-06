@@ -17,6 +17,10 @@ changing a required field is a breaking contract change.
 | `player:ready` | `{ match_id, guest_id }` | Confirm the client is ready. |
 | `switch:press` | `{ match_id, guest_id, request_id }` | Request a Switch; `request_id` supports idempotent handling. |
 | `turn:complete` | `{ match_id, guest_id }` | Development-only fake speech-end signal; the server validates ownership before changing turns. |
+| `media:credentials` | `{ match_id }` | Request the caller's LiveKit room credentials; the socket-bound guest identity is used. |
+| `transcription:start` | `{ player_id }` | Open a live PCM16 transcription stream for the mocked active player. |
+| `transcription:audio` | Binary PCM16 audio | Send one 16 kHz mono audio chunk (80 ms recommended). |
+| `transcription:stop` | None | Finish and close the caller's transcription stream. |
 
 ## Socket acknowledgements
 
@@ -36,6 +40,10 @@ changing a required field is a breaking contract change.
 | `switch:triggered` | `{ match_id, event, switches_remaining, request_id }` | Confirm a Switch; `event` conforms to the switch variant of `transcript-event.json`. |
 | `switch:rejected` | `{ match_id, code, message, request_id, switches_remaining }` | Reject an invalid Switch without changing state. |
 | `transcript:event` | `{ match_id, event }` | Broadcast one item conforming to `transcript-event.json`. |
+| `speech:started` | `{ player_id, speech_id }` | The STT provider detected the start of speech. |
+| `speech:partial` | `{ player_id, speech_id, text }` | Replace the current unfinished transcript line. |
+| `speech:final` | `{ player_id, speech_id, text }` | Finalize the current transcript line. |
+| `transcription:error` | `{ code, message }` | Report a recoverable microphone or STT failure. |
 | `round:end` | `{ match_id, ended_at, transcript_events }` | Stop input and share the final chronological event stream. |
 | `results:ready` | `{ match_id, results }` | Share a payload conforming to `schemas/results.json`. |
 | `player:disconnected` | `{ match_id, player_id, timestamp }` | Notify the remaining player. |
