@@ -11,6 +11,56 @@ const mockTranscript = [
   { type: "speech", id: "speech_005", player_id: "B", text: "Then dance us toward the big green planet before we—", is_final: true, accepted: true, truncated_by_round_end: true },
 ];
 
+const mockResults = {
+  winner: "B",
+  players: [
+    { id: "A", name: "PLAYER 7392", role: "CAPTAIN", total: 8_420, scores: { adaptability: 1_620, creativity: 1_740, speed: 1_560, coherence: 1_680, collaboration: 1_820 } },
+    { id: "B", name: "YOU", role: "INTERN", total: 9_180, scores: { adaptability: 1_920, creativity: 1_860, speed: 1_740, coherence: 1_820, collaboration: 1_840 } },
+  ],
+  highlights: ["Manual upside down", "Gravity controls", "Captain's pre-landing dance"],
+  bestMoment: "Then why are you holding the manual upside down?",
+  improvement: "Try a faster yes-and after your next switch.",
+};
+
+// eslint-disable-next-line react/prop-types
+function ResultsScreen({ onReplay, onLeave }) {
+  const winner = mockResults.players.find((player) => player.id === mockResults.winner);
+  const categories = [
+    ["Adaptability", "adaptability"],
+    ["Creativity", "creativity"],
+    ["Speed", "speed"],
+    ["Coherence", "coherence"],
+    ["Collaboration", "collaboration"],
+  ];
+
+  return (
+    <main className="results-page" aria-label="Round results">
+      <header className="guest-banner results-banner"><span className="guest-banner__spark">✦</span><span>ROUND 1 COMPLETE · JUDGING LOCKED IN</span><button className="guest-banner__claim" type="button" onClick={onLeave}>LEAVE</button></header>
+      <section className="results-stage">
+        <p className="results-kicker">ARCADE SCOREBOARD</p>
+        <h1>ROUND OVER</h1>
+        <p className="results-subtitle">THE SCENE HAS BEEN JUDGED</p>
+        <div className="results-winner"><span>WINNER</span><strong>{winner.name}</strong><small>{winner.role} · {winner.total.toLocaleString()} PTS</small></div>
+        <div className="scoreboard" role="table" aria-label="Player scores">
+          {mockResults.players.map((player) => (
+            <article className={`score-card ${player.id === mockResults.winner ? "score-card--winner" : ""}`} key={player.id} role="row">
+              <header><span>{player.id === mockResults.winner ? "★ WINNER" : "FINAL SCORE"}</span><b>{player.total.toLocaleString()}</b></header>
+              <h2>{player.name}</h2><p>{player.role}</p>
+              <div className="score-bars">{categories.map(([label, key]) => <div className="score-bar" key={key}><span>{label}</span><div><i style={{ width: `${Math.round((player.scores[key] / 2000) * 100)}%` }} /></div><b>{player.scores[key].toLocaleString()}</b></div>)}</div>
+            </article>
+          ))}
+        </div>
+        <div className="results-details">
+          <article><h2>HIGHLIGHTS</h2><ul>{mockResults.highlights.map((highlight) => <li key={highlight}>{highlight}</li>)}</ul></article>
+          <article><h2>BEST MOMENT</h2><p>“{mockResults.bestMoment}”</p></article>
+          <article><h2>LEVEL UP</h2><p>{mockResults.improvement}</p></article>
+        </div>
+        <div className="results-actions"><button type="button" className="results-button results-button--primary" onClick={onReplay}>▶ PLAY AGAIN</button><button type="button" className="results-button" onClick={onLeave}>BACK TO HOME</button></div>
+      </section>
+    </main>
+  );
+}
+
 function permissionMessage(error) {
   if (error?.name === "NotAllowedError") {
     return "Camera and microphone access was blocked. Allow both in your browser, then try again.";
@@ -163,6 +213,8 @@ export function MediaRoom({ onLeave }) {
     setSwitchedPlayer(targetPlayer);
     reactionTimerRef.current = window.setTimeout(() => setSwitchedPlayer(null), 800);
   };
+
+  if (gamePhase === "ended") return <ResultsScreen onReplay={startRound} onLeave={leaveRoom} />;
 
   if (gamePhase !== "setup") {
     const opponentPlayer = localPlayer === "A" ? "B" : "A";
