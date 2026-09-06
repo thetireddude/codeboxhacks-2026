@@ -63,7 +63,8 @@ class JudgeService:
                         # token cap could truncate otherwise valid structured
                         # output that succeeded with the short fixture IDs.
                         "max_output_tokens": 2_048,
-                        "temperature": 0.2,
+                        "temperature": 0,
+                        "seed": 17,
                     },
                 )
                 if response.parsed is None:
@@ -71,7 +72,9 @@ class JudgeService:
                         "Gemini returned no parsed judgment"
                         f" (finish_reason={self._finish_reason(response)})."
                     )
-                result = JudgeResult.model_validate(response.parsed)
+                result = JudgeResult.model_validate(
+                    self._normalize_semantic_scores(response.parsed)
+                )
                 return self._sanitize_highlight_events(result, judge_input)
             except JudgeError:
                 raise
@@ -119,6 +122,27 @@ class JudgeService:
         return str(reason or "unknown")
 
     @staticmethod
+    def _normalize_semantic_scores(payload: Any) -> Any:
+        """Quantize valid provider scores without masking malformed values."""
+        if not isinstance(payload, dict):
+            return payload
+        normalized = dict(payload)
+        for player_key in ("player_a", "player_b"):
+            player = normalized.get(player_key)
+            if not isinstance(player, dict):
+                continue
+            player = dict(player)
+            categories = player.get("category_points")
+            if isinstance(categories, dict):
+                categories = dict(categories)
+                for category, value in categories.items():
+                    if type(value) is int:
+                        categories[category] = min(2000, max(0, ((value + 50) // 100) * 100))
+                player["category_points"] = categories
+            normalized[player_key] = player
+        return normalized
+
+    @staticmethod
     def _build_prompt(judge_input: JudgeInput) -> str:
         scenario = judge_input.scenario
         accepted = [
@@ -146,9 +170,23 @@ class JudgeService:
         }
         return (
             "You are an encouraging but exacting improv coach judging a completed "
-            "two-player scene. Player A is the first role and Player B is the "
+            "two-player scene using the fixed public-speaking rubric version "
+            "public-speaking-v1. Player A is the first role and Player B is the "
             "second role. Score each player independently in arcade points from "
-            "0 to 2000 for adaptability, creativity, coherence, and collaboration. "
+            "0 to 2000, using increments of exactly 100, for adaptability, "
+            "articulation, coherence, and collaboration. Apply these same anchors "
+            "in every round: 0=no assessable evidence; 400=very limited; "
+            "800=inconsistent; 1200=functional; 1600=strong; 2000=exceptional. "
+            "Use intermediate 100-point steps only when evidence falls between anchors. "
+            "Adaptability measures whether responses acknowledge and adjust to prior "
+            "accepted lines and Switch changes. Articulation measures only clarity "
+            "visible in the transcript: understandable wording, complete thoughts, "
+            "and limited filler or needless repetition; never infer pronunciation, "
+            "volume, vocal confidence, or audio quality. Coherence measures logical "
+            "continuity, organization, and contradictions. Collaboration measures "
+            "listening evidence, useful offers, and how well responses leave the other "
+            "speaker room to continue. Require transcript evidence for every score. "
+            "Do not reward novelty, absurdity, or ornate vocabulary by themselves. "
             "Judge rejected speech only as evidence of Switch recovery; it is not "
             "scene canon. Do not score speed and do not infer timing quality from "
             "text; latency data is supplied only to explain Switch context. "
@@ -167,17 +205,22 @@ class JudgeService:
                 "category_points": {
                     "type": "OBJECT",
                     "properties": {
-                        name: {"type": "INTEGER", "minimum": 0, "maximum": 2000}
+                        name: {
+                            "type": "INTEGER",
+                            "minimum": 0,
+                            "maximum": 2000,
+                            "multipleOf": 100,
+                        }
                         for name in (
                             "adaptability",
-                            "creativity",
+                            "articulation",
                             "coherence",
                             "collaboration",
                         )
                     },
                     "required": [
                         "adaptability",
-                        "creativity",
+                        "articulation",
                         "coherence",
                         "collaboration",
                     ],
@@ -277,7 +320,7 @@ class TestJudgeService:
 
     def judge(self, _judge_input: JudgeInput) -> JudgeResult:
         points = SemanticCategoryPoints(
-            adaptability=0, creativity=0, coherence=0, collaboration=0
+            adaptability=0, articulation=0, coherence=0, collaboration=0
         )
         player = JudgedPlayer(
             category_points=points,

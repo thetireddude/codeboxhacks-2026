@@ -388,7 +388,7 @@ export function HomePage() {
                 <li><b>TAKE TURNS SPEAKING.</b> Only the active player&apos;s microphone is live.</li>
                 <li><b>USE SWITCH WISELY.</b> Interrupt the current speaker and make them pivot into something wacky, original, and still scene-related.</li>
                 <li><b>BUILD THE SCENE.</b> Say yes, add ideas, and keep the story moving.</li>
-                <li><b>BEAT THE TIMER.</b> Gemini scores creativity, adaptability, collaboration, coherence, and speed.</li>
+                <li><b>BUILD SPEAKING SKILL.</b> Scores track articulation, coherence, adaptability, collaboration, and response speed.</li>
                 <li><b>QUEUE AGAIN.</b> Choose Next Match when the round ends.</li>
               </ol>
               <button className="rules-card__play" type="button" onClick={() => setRulesOpen(false)}>GOT IT</button>

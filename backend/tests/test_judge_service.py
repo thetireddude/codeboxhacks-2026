@@ -13,10 +13,10 @@ FIXTURE_DIR = Path(__file__).resolve().parents[2] / "shared" / "fixtures"
 VALID_JUDGMENT = {
     "player_a": {
         "category_points": {
-            "adaptability": 1920,
-            "creativity": 1760,
-            "coherence": 1650,
-            "collaboration": 1550,
+            "adaptability": 1900,
+            "articulation": 1800,
+            "coherence": 1700,
+            "collaboration": 1600,
         },
         "highlight": "Turned the upside-down manual into a captain's ritual.",
         "improvement": "Invite the intern into the landing decision earlier.",
@@ -24,9 +24,9 @@ VALID_JUDGMENT = {
     "player_b": {
         "category_points": {
             "adaptability": 1600,
-            "creativity": 1710,
-            "coherence": 1580,
-            "collaboration": 1550,
+            "articulation": 1700,
+            "coherence": 1600,
+            "collaboration": 1600,
         },
         "highlight": "Used the upside-down manual to raise the stakes.",
         "improvement": "Commit to a specific landing plan sooner.",
@@ -89,7 +89,7 @@ def test_judges_fixture_transcript_with_structured_output():
 
     result = service.judge(_judge_input())
 
-    assert result.player_a.category_points.adaptability == 1920
+    assert result.player_a.category_points.adaptability == 1900
     assert result.highlight_events[0].transcript_event_ids == [
         "speech_003",
         "switch_001",
@@ -102,9 +102,29 @@ def test_judges_fixture_transcript_with_structured_output():
     assert call["config"]["response_schema"]["properties"]["highlight_events"][
         "maxItems"
     ] == 4
-    assert call["config"]["temperature"] == 0.2
+    assert call["config"]["temperature"] == 0
+    assert call["config"]["seed"] == 17
     assert "rejected_speech" in call["contents"]
     assert "switch_response_latencies_ms" in call["contents"]
+    assert "public-speaking-v1" in call["contents"]
+    assert "never infer pronunciation" in call["contents"]
+
+
+def test_normalizes_scores_to_the_standard_hundred_point_steps():
+    inconsistent = {
+        **VALID_JUDGMENT,
+        "player_a": {
+            **VALID_JUDGMENT["player_a"],
+            "category_points": {
+                **VALID_JUDGMENT["player_a"]["category_points"],
+                "articulation": 1750,
+            },
+        },
+    }
+
+    result = _service([inconsistent]).judge(_judge_input())
+
+    assert result.player_a.category_points.articulation == 1800
 
 
 def test_retries_when_gemini_returns_an_invalid_result():

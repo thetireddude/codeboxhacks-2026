@@ -236,7 +236,9 @@ class LeaderboardRepository:
             "guest_id": str(guest_id),
             "total_score": result.total_points,
             "adaptability": points.adaptability,
-            "creativity": points.creativity,
+            # Preserve the existing physical column until the account/profile
+            # migration; public-speaking-v1 stores articulation in this slot.
+            "creativity": points.articulation,
             "speed": points.speed,
             "coherence": points.coherence,
             "collaboration": points.collaboration,

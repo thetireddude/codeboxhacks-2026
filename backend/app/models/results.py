@@ -10,7 +10,7 @@ class CategoryPoints(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     adaptability: int = Field(ge=0)
-    creativity: int = Field(ge=0)
+    articulation: int = Field(ge=0)
     speed: int = Field(ge=0)
     coherence: int = Field(ge=0)
     collaboration: int = Field(ge=0)

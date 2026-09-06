@@ -28,7 +28,7 @@ The result is presented like an arcade/fighting-game score screen rather than a 
 The system is designed to reward improv skill under pressure, especially:
 
 - Adaptability
-- Creativity
+- Articulation
 - Speed of recovery after Switches
 - Coherence
 - Collaboration / scene-building
@@ -445,7 +445,7 @@ Possible event representation:
 MVP scoring categories are:
 
 - Adaptability
-- Creativity
+- Articulation
 - Speed
 - Coherence
 - Collaboration / Scene Building
@@ -460,7 +460,7 @@ Example:
 PLAYER A — 8,420
 
 Adaptability            1,920
-Creativity              1,760
+Articulation            1,800
 Speed                   1,540
 Coherence               1,650
 Collaboration           1,550
@@ -469,6 +469,24 @@ PLAYER A WINS
 ```
 
 Exact category weights and maximum values remain configurable until playtesting.
+
+### Public-speaking rubric version `public-speaking-v1`
+
+Semantic scores use the same six anchors in every session and may only move in
+100-point increments: `0` no assessable evidence, `400` very limited, `800`
+inconsistent, `1200` functional, `1600` strong, and `2000` exceptional.
+
+- **Adaptability:** acknowledges and adjusts to prior accepted lines and Switch changes.
+- **Articulation:** understandable wording, complete thoughts, and limited filler or needless repetition visible in the transcript.
+- **Coherence:** logical continuity, organization, and absence of contradictions.
+- **Collaboration:** listening evidence, useful offers, and room for the other speaker to continue.
+- **Speed:** server-calculated response latency after a Switch; never estimated by AI.
+
+Articulation is transcript-limited. Until acoustic evidence is retained, the
+judge must not infer pronunciation, vocal projection, volume, confidence,
+intonation, or audio quality. Novelty, absurdity, and ornate vocabulary are not
+independent sources of points. The judge runs at temperature zero with a fixed
+seed, and every semantic score must be supported by transcript evidence.
 
 ---
 
@@ -479,7 +497,7 @@ Exact category weights and maximum values remain configurable until playtesting.
 Gemini judges:
 
 - Adaptability
-- Creativity
+- Articulation
 - Coherence
 - Collaboration / Scene Building
 - quality of Switch recovery
@@ -533,7 +551,7 @@ Important:
 
 - faster recovery earns more Speed points
 - fast nonsense should not outperform a slower but strong improv choice
-- Gemini's Adaptability / Creativity evaluation remains separate from deterministic Speed scoring
+- Gemini's transcript-based Adaptability / Articulation evaluation remains separate from deterministic Speed scoring
 
 ---
 
@@ -613,7 +631,7 @@ Outputs should include:
 {
   "player_a": {
     "adaptability_points": 0,
-    "creativity_points": 0,
+    "articulation_points": 0,
     "coherence_points": 0,
     "collaboration_points": 0,
     "highlight": "",
@@ -621,7 +639,7 @@ Outputs should include:
   },
   "player_b": {
     "adaptability_points": 0,
-    "creativity_points": 0,
+    "articulation_points": 0,
     "coherence_points": 0,
     "collaboration_points": 0,
     "highlight": "",
@@ -1444,7 +1462,7 @@ Convert the completed structured round into deterministic arcade scores and coac
 - judge input schema
 - judge output validation
 - Adaptability points
-- Creativity points
+- Articulation points
 - Coherence points
 - Collaboration / Scene Building points
 - Switch recovery quality analysis
@@ -1949,7 +1967,7 @@ Checklist:
 - structural rejection for inactive third-party tasks and collective object-is-alive-or-food prompts
 - judge input schema
 - Adaptability scoring
-- Creativity scoring
+- Articulation scoring
 - Coherence scoring
 - Collaboration/Scene Building scoring
 - Switch recovery analysis
@@ -2066,7 +2084,7 @@ The MVP is complete when all of the following are true:
 18. At 60 seconds the round stops immediately.
 19. No audio/video recording is retained.
 20. Gemini judges the completed round after gameplay ends.
-21. Results include Adaptability, Creativity, Speed, Coherence, and Collaboration/Scene Building.
+21. Results include Adaptability, Articulation, Speed, Coherence, and Collaboration/Scene Building.
 22. Results use arcade point totals.
 23. One winner is selected or a tie is explicitly handled.
 24. Each player receives one highlight and one improvement.

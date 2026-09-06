@@ -289,13 +289,13 @@ export function SttTestPage() {
           <h2>{results.winner === "TIE" ? "TIE GAME" : `PLAYER ${results.winner} WINS`}</h2>
           <div className="stt-result-score">
             <strong>PLAYER A</strong><b>{results.player_a.total_points.toLocaleString()}</b>
-            <span>Adaptability {results.player_a.category_points.adaptability} · Creativity {results.player_a.category_points.creativity} · Speed {results.player_a.category_points.speed}</span>
+            <span>Adaptability {results.player_a.category_points.adaptability} · Articulation {results.player_a.category_points.articulation} · Speed {results.player_a.category_points.speed}</span>
           </div>
           <p><b>Best moment:</b> {results.player_a.highlight}</p>
           <p><b>Try next:</b> {results.player_a.improvement}</p>
           <div className="stt-result-score">
             <strong>PLAYER B</strong><b>{results.player_b.total_points.toLocaleString()}</b>
-            <span>Adaptability {results.player_b.category_points.adaptability} · Creativity {results.player_b.category_points.creativity} · Speed {results.player_b.category_points.speed}</span>
+            <span>Adaptability {results.player_b.category_points.adaptability} · Articulation {results.player_b.category_points.articulation} · Speed {results.player_b.category_points.speed}</span>
           </div>
           <p><b>Best moment:</b> {results.player_b.highlight}</p>
           <p><b>Try next:</b> {results.player_b.improvement}</p>

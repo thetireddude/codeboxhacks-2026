@@ -134,7 +134,7 @@ class ScoringService:
         semantic = judged_player.category_points
         categories = CategoryPoints(
             adaptability=semantic.adaptability,
-            creativity=semantic.creativity,
+            articulation=semantic.articulation,
             speed=speed_points,
             coherence=semantic.coherence,
             collaboration=semantic.collaboration,

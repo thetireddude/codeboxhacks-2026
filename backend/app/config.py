@@ -138,7 +138,9 @@ class AppConfig:
     # Redis owns short-lived matchmaking state. Leaderboard scores are durable
     # and intentionally use a separate relational database.
     DATABASE_URL = os.getenv("DATABASE_URL", "")
-    LEADERBOARD_SCORING_VERSION = os.getenv("LEADERBOARD_SCORING_VERSION", "v1")
+    LEADERBOARD_SCORING_VERSION = os.getenv(
+        "LEADERBOARD_SCORING_VERSION", "public-speaking-v1"
+    )
     LEADERBOARD_AUTO_CREATE_SCHEMA = (
         os.getenv("LEADERBOARD_AUTO_CREATE_SCHEMA", "false").lower() == "true"
     )

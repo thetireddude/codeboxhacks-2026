@@ -20,7 +20,7 @@ class FakeJudge:
                 "player_a": {
                     "category_points": {
                         "adaptability": 1000,
-                        "creativity": 1100,
+                        "articulation": 1100,
                         "coherence": 1200,
                         "collaboration": 1300,
                     },
@@ -30,7 +30,7 @@ class FakeJudge:
                 "player_b": {
                     "category_points": {
                         "adaptability": 0,
-                        "creativity": 0,
+                        "articulation": 0,
                         "coherence": 0,
                         "collaboration": 0,
                     },
