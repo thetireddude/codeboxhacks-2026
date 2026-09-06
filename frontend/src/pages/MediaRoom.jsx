@@ -72,7 +72,7 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
     if (!targetPlayer) return;
     window.clearTimeout(switchFeedbackTimerRef.current);
     setSwitchFeedback({ eventId: event.id, targetPlayer });
-    switchFeedbackTimerRef.current = window.setTimeout(() => setSwitchFeedback(null), 1200);
+    switchFeedbackTimerRef.current = window.setTimeout(() => setSwitchFeedback(null), 1800);
     if (targetPlayer === localPlayer) {
       setPartialTranscript("");
       setTranscriptionStatus("Switch received — starting your replacement response…");
@@ -112,6 +112,10 @@ export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
       if (payload.match_id !== match.match_id) return;
       if (payload.event?.type === "switch") {
         setTranscript((current) => current.some((line) => line.id === payload.event.id) ? current : [...current, payload.event]);
+        // The transcript is authoritative and is broadcast to both clients.
+        // It also guarantees that the visual feedback survives a delayed or
+        // missed dedicated switch notification.
+        showSwitchImpact(payload.event);
         return;
       }
       if (payload.event?.type !== "speech") return;
