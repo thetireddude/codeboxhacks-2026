@@ -76,7 +76,7 @@ class AppConfig:
     # this comma-separated list through SCENARIO_ROLE_BLACKLIST.
     SCENARIO_ROLE_BLACKLIST = _as_words(
         "SCENARIO_ROLE_BLACKLIST",
-        "mime,mimes,mute,muted,nonverbal,non-verbal",
+        "mime,mimes,mute,muted,nonverbal,non-verbal,deaf",
     )
     GEMINI_JUDGE_MODEL = os.getenv("GEMINI_JUDGE_MODEL", "gemini-3.1-flash-lite")
     # Keep SDK retries disabled, but retry one failed structured judgment. This
@@ -103,7 +103,7 @@ class AppConfig:
         Tone.DRAMATIC,
     )
     GEMINI_SCENARIO_PROMPT_TEMPLATE = "\n".join([
-        "Create one original two-person improv scene starter in a {tone} tone.",
+        "Create one original two-character improv scene starter in a {tone} tone.",
         "For a mundane tone, use an ordinary everyday situation without a hidden twist, coincidence, or heightened premise.",
         "For emotional or dramatic tones, use a grounded human stake rather than melodrama or a secret-reveal plot.",
         "For a suspenseful tone, use a small immediate uncertainty or time pressure; do not use danger, violence, or a hidden villain.",
