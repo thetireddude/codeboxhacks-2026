@@ -258,10 +258,10 @@ def create_judge_service(config: Any) -> JudgeService:
     if _config_value(config, "TESTING", False):
         return TestJudgeService()
     return JudgeService(
-        api_key=_config_value(config, "GEMINI_API_KEY"),
-        model=_config_value(config, "GEMINI_JUDGE_MODEL"),
-        max_attempts=_config_value(config, "GEMINI_JUDGE_MAX_ATTEMPTS"),
-        timeout_ms=_config_value(config, "GEMINI_JUDGE_TIMEOUT_MS"),
+        api_key=_config_value(config, "GEMINI_API_KEY", ""),
+        model=_config_value(config, "GEMINI_JUDGE_MODEL", "gemini-3.1-flash-lite"),
+        max_attempts=_config_value(config, "GEMINI_JUDGE_MAX_ATTEMPTS", 1),
+        timeout_ms=_config_value(config, "GEMINI_JUDGE_TIMEOUT_MS", 12_000),
     )
 
 

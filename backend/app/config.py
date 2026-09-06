@@ -1,4 +1,5 @@
 import os
+import random
 
 from dotenv import load_dotenv
 
@@ -30,6 +31,18 @@ def _as_words(name: str, default: str) -> tuple[str, ...]:
         for item in os.getenv(name, default).split(",")
         if item.strip()
     )
+
+
+_SCENARIO_WORD_POOL = (
+    "mirror", "ticket", "ladder", "orange", "receipt", "bell", "helmet",
+    "envelope", "candle", "key", "map", "clock", "paint", "coin",
+    "window", "rope", "shoe", "menu", "bucket", "photograph",
+)
+
+
+def get_random_words() -> str:
+    """Return lightweight inspiration without dictating the scene premise."""
+    return ", ".join(random.sample(_SCENARIO_WORD_POOL, 3))
 
 
 class AppConfig:
@@ -74,6 +87,7 @@ class AppConfig:
     SPEED_DECAY_POINTS_PER_SECOND = _as_int("SPEED_DECAY_POINTS_PER_SECOND", 120)
     SPEED_MAX_POINTS = _as_int("SPEED_MAX_POINTS", 2000)
     GEMINI_SCENARIO_TONES = (
+        Tone.MUNDANE,
         Tone.RELATABLE,
         Tone.WACKY,
         Tone.FUNNY,
@@ -81,19 +95,30 @@ class AppConfig:
         Tone.SERIOUS,
         Tone.SAD,
     )
-    GEMINI_SCENARIO_PROMPT_TEMPLATE = (
-        "Create an original, brief improv scene starter in a {tone} tone. "
-        "Should be no more than 12 words.\n\n"
-        "Give both performers distinct, complementary roles with an immediate "
-        "relationship or tension. The setup must be playable and readable "
-        "immediately in a "
-        "short two-person scene.\n\n"
-        "Do not use real people, copyrighted characters, slurs, sexual content, "
-        "graphic violence, illegal instructions, or stereotypes about protected "
-        "groups. Do not assign roles containing these words: "
-        f"{', '.join(SCENARIO_ROLE_BLACKLIST)}. Do not include a winner, scoring "
-        "instruction, Switch rule, or gameplay modifier."
-    )
+    GEMINI_SCENARIO_PROMPT_TEMPLATE = "\n".join([
+        "Create one original two-person improv scene starter in a {tone} tone.",
+        "For a mundane tone, use an ordinary everyday situation without a hidden twist, coincidence, or heightened premise.",
+        "", "The scene should be a simple, concrete, playable starting point, not a plot.",
+        "Focus on what is happening between the two people right now. Include at most one meaningful complication.",
+        "Leave the outcome, explanation, and escalation for the performers to invent.",
+        "", "VARIETY:",
+        "- Vary the fundamental reason the scene is interesting, not merely the setting or relationship.",
+        "- Conflict is optional: people may cooperate, share a problem, misunderstand each other, or react to an unusual circumstance.",
+        "- Do not default to opposing goals, arguments, ex-partners, estranged relatives, secrets, betrayals, confessions, or competing goals.",
+        "- Do not use duplicate, identical, matching, or exact-same-item premises.",
+        "- Do not use sibling, packing-up, moving-out, or moving-away premises.",
+        "", "ROLES:",
+        "- Describe only who each person is in the immediate situation; each role must be 8 words or fewer.",
+        "- Roles may be asymmetric and do not need to oppose, contrast, or prescribe personality, emotion, speaking style, or strategy.",
+        "", "LENGTH:", "- Scenario must be 18 words maximum.",
+        "", "OPTIONAL INSPIRATION:",
+        "- You may draw one abstract concept from: {random_words}.",
+        "- Do not force these words into the scene.",
+        "", "SAFETY:",
+        "- Do not use real people, copyrighted characters, slurs, sexual content, graphic violence, illegal instructions, or stereotypes about protected groups.",
+        f"- Do not assign roles containing these words: {', '.join(SCENARIO_ROLE_BLACKLIST)}.",
+        "- Do not include a winner, scoring instruction, Switch rule, or gameplay modifier.",
+    ])
 
     STT_PROVIDER = os.getenv("STT_PROVIDER") or "deepgram"
     DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")

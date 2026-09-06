@@ -4,12 +4,19 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class Tone(StrEnum):
+    MUNDANE = "mundane"
     RELATABLE = "relatable"
     WACKY = "wacky"
     FUNNY = "funny"
     STUPID = "stupid"
     SERIOUS = "serious"
     SAD = "sad"
+    AWKWARD = "awkward"
+    TENSE = "tense"
+    EMOTIONAL = "emotional"
+    CHAOTIC = "chaotic"
+    WHOLESOME = "wholesome"
+    DRAMATIC = "dramatic"
 
 
 class Scenario(BaseModel):
