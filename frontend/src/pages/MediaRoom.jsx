@@ -26,6 +26,9 @@ export function MediaRoom({ onLeave }) {
   const [activePlayer, setActivePlayer] = useState("A");
   const [switches, setSwitches] = useState({ A: 5, B: 5 });
   const [roundLog, setRoundLog] = useState([]);
+  const [localPlayer, setLocalPlayer] = useState("B");
+  const [switchedPlayer, setSwitchedPlayer] = useState(null);
+  const reactionTimerRef = useRef(null);
 
   const stopPreview = () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -103,6 +106,7 @@ export function MediaRoom({ onLeave }) {
   };
 
   const leaveRoom = () => {
+    window.clearTimeout(reactionTimerRef.current);
     stopPreview();
     onLeave();
   };
@@ -120,13 +124,29 @@ export function MediaRoom({ onLeave }) {
   };
 
   const pressSwitch = () => {
-    if (gamePhase !== "active" || activePlayer !== "A" || switches.B === 0) return;
-    setSwitches((current) => ({ ...current, B: current.B - 1 }));
-    setRoundLog((current) => [...current, { kind: "switch", text: "SWITCH · PLAYER 7392 INTERRUPTS PLAYER A" }, { kind: "A", text: "There never was a landing gear. It was a warning flag." }]);
+    const targetPlayer = activePlayer;
+    const opponentPlayer = localPlayer === "A" ? "B" : "A";
+    if (gamePhase !== "active" || targetPlayer !== opponentPlayer || switches[localPlayer] === 0) return;
+    setSwitches((current) => ({ ...current, [localPlayer]: current[localPlayer] - 1 }));
+    setRoundLog((current) => {
+      const interruptedIndex = [...current].map((entry, index) => ({ entry, index })).reverse().find(({ entry }) => entry.kind === targetPlayer && !entry.interrupted)?.index;
+      const nextLog = current.map((entry, index) => index === interruptedIndex ? { ...entry, interrupted: true } : entry);
+      const targetLabel = targetPlayer === "A" ? "PLAYER 7392" : "YOU";
+      const switcherLabel = localPlayer === "A" ? "PLAYER 7392" : "YOU";
+      return [...nextLog, { kind: "switch", text: `SWITCH · ${switcherLabel} INTERRUPPTS ${targetLabel}` }, { kind: targetPlayer, text: "— No, wait. The warning light is trying to tell us something." }];
+    });
+    window.clearTimeout(reactionTimerRef.current);
+    setSwitchedPlayer(targetPlayer);
+    reactionTimerRef.current = window.setTimeout(() => setSwitchedPlayer(null), 800);
   };
 
   if (gamePhase !== "setup") {
-    const playerBMaySwitch = gamePhase === "active" && activePlayer === "A" && switches.B > 0;
+    const opponentPlayer = localPlayer === "A" ? "B" : "A";
+    const localPlayerName = localPlayer === "A" ? "PLAYER 7392" : "YOU";
+    const opponentName = opponentPlayer === "A" ? "PLAYER 7392" : "YOU";
+    const localRole = localPlayer === "A" ? "CAPTAIN" : "INTERN";
+    const opponentRole = opponentPlayer === "A" ? "CAPTAIN" : "INTERN";
+    const localPlayerMaySwitch = gamePhase === "active" && activePlayer === opponentPlayer && switches[localPlayer] > 0;
     return (
       <main className="media-page">
         <header className="guest-banner"><span className="guest-banner__spark">✦</span><span>Round 1 · Two astronauts discover neither knows how to land the spaceship.</span><button className="guest-banner__claim" type="button" onClick={leaveRoom}>LEAVE</button></header>
@@ -136,22 +156,25 @@ export function MediaRoom({ onLeave }) {
             <div className="media-heading media-heading--game"><p>LIVE SCENE · ROUND 1</p><h1>GET READY<br /><span>TO IMPROVISE.</span></h1></div>
             <div className={`round-timer round-timer--${gamePhase}`}><span>{gamePhase === "ended" ? "ROUND OVER" : "TIME LEFT"}</span><b>{gamePhase === "ended" ? "00:00" : timerLabel}</b></div>
             <div className="video-grid game-video-grid">
-              <article className={`video-tile video-tile--local ${activePlayer === "B" ? "video-tile--active" : ""}`}>
+              <article className={`video-tile video-tile--local ${activePlayer === localPlayer ? "video-tile--active" : ""} ${switchedPlayer === localPlayer ? "video-tile--switched" : ""}`}>
                 <video ref={previewRef} autoPlay muted playsInline className={hasPreview ? "" : "video-tile__hidden"} />
-                {!hasPreview && <div className="video-placeholder"><b>YOU</b><span>CAMERA PREVIEW</span></div>}
-                <div className="video-tile__label"><span>YOU · INTERN</span><b>{activePlayer === "B" ? "● SPEAKING" : "○ LISTENING"}</b></div>
-                <div className="switch-count">SWITCHES <b>{switches.B}</b></div>
-                <button type="button" className="switch-button" disabled={!playerBMaySwitch} onClick={pressSwitch}>↯ SWITCH <small>{playerBMaySwitch ? "INTERRUPT PLAYER 7392" : activePlayer === "B" ? "WAIT FOR OPPONENT" : "ROUND NOT ACTIVE"}</small></button>
+                {!hasPreview && <div className="video-placeholder"><b>{localPlayerName}</b><span>CAMERA PREVIEW</span></div>}
+                <div className="video-tile__label"><span>{localPlayerName} · {localRole}</span><b>{activePlayer === localPlayer ? "● SPEAKING" : "○ LISTENING"}</b></div>
+                {switchedPlayer === localPlayer && <div className="switched-reaction">SWITCHED!</div>}
+                <div className="switch-count">SWITCHES <b>{switches[localPlayer]}</b></div>
+                <button type="button" className="switch-button" disabled={!localPlayerMaySwitch} onClick={pressSwitch}>↯ SWITCH <small>{localPlayerMaySwitch ? `INTERRUPT ${opponentName}` : activePlayer === localPlayer ? "WAIT FOR OPPONENT" : "ROUND NOT ACTIVE"}</small></button>
               </article>
-              <article className={`video-tile video-tile--remote ${activePlayer === "A" ? "video-tile--active" : ""}`}>
-                <div className="video-placeholder"><b>PLAYER 7392</b><span>LIVEKIT VIDEO CONNECTING</span></div>
-                <div className="video-tile__label"><span>PLAYER 7392 · CAPTAIN</span><b>{activePlayer === "A" ? "● SPEAKING" : "○ LISTENING"}</b></div>
-                <div className="switch-count">SWITCHES <b>{switches.A}</b></div>
+              <article className={`video-tile video-tile--remote ${activePlayer === opponentPlayer ? "video-tile--active" : ""} ${switchedPlayer === opponentPlayer ? "video-tile--switched" : ""}`}>
+                <div className="video-placeholder"><b>{opponentName}</b><span>LIVEKIT VIDEO CONNECTING</span></div>
+                <div className="video-tile__label"><span>{opponentName} · {opponentRole}</span><b>{activePlayer === opponentPlayer ? "● SPEAKING" : "○ LISTENING"}</b></div>
+                {switchedPlayer === opponentPlayer && <div className="switched-reaction">SWITCHED!</div>}
+                <div className="switch-count">SWITCHES <b>{switches[opponentPlayer]}</b></div>
                 <button type="button" className="switch-button" disabled>↯ SWITCH <small>OPPONENT CONTROLS THIS</small></button>
               </article>
               {gamePhase === "countdown" && <div className="countdown-overlay" aria-live="assertive"><span>ROUND 1</span><b>{countdown || "GO!"}</b><small>THE SCENE STARTS NOW</small></div>}
             </div>
-            <section className="round-log" aria-label="Round activity log" aria-live="polite"><header><span>◫ SCENE LOG</span><b>{gamePhase === "ended" ? "ROUND COMPLETE" : activePlayer === "A" ? "PLAYER 7392 HAS THE FLOOR" : "YOU HAVE THE FLOOR"}</b></header><div className="round-log__entries">{roundLog.map((entry, index) => <p key={`${entry.text}-${index}`} className={`round-log__entry round-log__entry--${entry.kind} ${entry.kind === activePlayer ? "round-log__entry--active" : ""}`}>{entry.kind === "A" ? <><strong>PLAYER 7392:</strong> {entry.text}</> : entry.kind === "B" ? <><strong>YOU:</strong> {entry.text}</> : entry.text}</p>)}</div></section>
+            <section className="round-log" aria-label="Round activity log" aria-live="polite"><header><span>◫ SCENE LOG</span><b>{gamePhase === "ended" ? "ROUND COMPLETE" : activePlayer === "A" ? "PLAYER 7392 HAS THE FLOOR" : "YOU HAVE THE FLOOR"}</b></header><div className="round-log__entries">{roundLog.map((entry, index) => <p key={`${entry.text}-${index}`} className={`round-log__entry round-log__entry--${entry.kind} ${entry.kind === activePlayer && !entry.interrupted ? "round-log__entry--active" : ""} ${entry.interrupted ? "round-log__entry--interrupted" : ""}`}>{entry.kind === "A" ? <><strong>PLAYER 7392:</strong> {entry.text}</> : entry.kind === "B" ? <><strong>YOU:</strong> {entry.text}</> : entry.text}</p>)}</div></section>
+            <div className="mock-view-toggle" aria-label="Mock perspective selector"><span>MOCK VIEW</span><button type="button" className={localPlayer === "B" ? "mock-view-toggle__selected" : ""} onClick={() => setLocalPlayer("B")}>YOU · PLAYER B</button><button type="button" className={localPlayer === "A" ? "mock-view-toggle__selected" : ""} onClick={() => setLocalPlayer("A")}>PLAYER 7392 · PLAYER A</button></div>
           </div>
         </section>
       </main>
