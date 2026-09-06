@@ -758,6 +758,16 @@ Production matches now require `GEMINI_API_KEY` and use Gemini generation;
 the deterministic astronaut scene remains available only to automated tests
 and the standalone mock judging route.
 
+#### Deployment readiness
+
+The public frontend can run on any player computer with a browser-safe
+`VITE_BACKEND_URL`. The backend host alone must configure Gemini, Deepgram, and
+LiveKit credentials, permit its public frontend origin through CORS, and accept
+Socket.IO/WebSocket traffic. `GET /api/ready` reports missing host-side
+configuration names without exposing values. Gemini and unexpected scoring
+failures are logged on the backend host while both clients receive the safe
+`JUDGING_UNAVAILABLE` state and the match is cleaned up.
+
 ---
 
 ## Milestone I4 — Live Transcript Integration

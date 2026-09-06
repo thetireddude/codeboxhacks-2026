@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from app.models.judgment import (
@@ -11,6 +12,9 @@ from app.models.judgment import (
     JudgedPlayer,
     SemanticCategoryPoints,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class JudgeError(RuntimeError):
@@ -67,6 +71,14 @@ class JudgeService:
             except Exception as error:
                 last_error = error
 
+        logger.error(
+            "Gemini judging failed after %s attempt(s) using model %s.",
+            self._max_attempts,
+            self._model,
+            exc_info=(type(last_error), last_error, last_error.__traceback__)
+            if last_error is not None
+            else None,
+        )
         raise JudgeError(
             f"Judging failed after {self._max_attempts} attempts."
         ) from last_error

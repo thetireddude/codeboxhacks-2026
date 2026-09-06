@@ -1324,6 +1324,13 @@ speech, including interrupted/rejected speech. A Gemini judge failure now
 emits `JUDGING_UNAVAILABLE` to both clients and cleans up the match rather than
 leaving the scoring view indefinitely pending.
 
+For deployment, browser clients require only the public `VITE_BACKEND_URL`.
+The Flask host alone owns Gemini, Deepgram, and LiveKit credentials and exposes
+`GET /api/ready`, a secret-free readiness report that returns 503 with the
+names of missing host-side integrations. Gemini judge failures retain the safe
+client message but write the underlying provider error to backend-host logs;
+unexpected scoring failures follow the same visible cleanup path.
+
 Production scenario preparation requires `GEMINI_API_KEY`: it no longer falls
 back to a hardcoded scene when credentials are absent. Deterministic scenarios
 remain only in automated-test and standalone mock-judging paths.
