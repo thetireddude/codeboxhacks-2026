@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from random import choice
+import re
 from typing import Any
 
+from app.config import get_random_words
 from app.models import Scenario, Tone
 
 
@@ -31,6 +33,18 @@ class MockScenarioService:
 
 class ScenarioService:
     """Generate one validated improv scenario with Gemini."""
+
+    # These premise shapes appeared repeatedly in live generations. They are
+    # deliberately rejected after structured parsing so a retry can produce a
+    # materially different playable starting point instead.
+    _OVERUSED_PATTERNS = (
+        re.compile(r"\b(?:the\s+)?(?:exact\s+)?same\b", re.IGNORECASE),
+        re.compile(r"\b(?:identical|matching|duplicate)\b", re.IGNORECASE),
+        re.compile(r"\b(?:estranged|long-lost)\b", re.IGNORECASE),
+        re.compile(r"\b(?:sibling|siblings|brother|sister)\b", re.IGNORECASE),
+        re.compile(r"\bpack(?:ing|ed)?\s+up\b", re.IGNORECASE),
+        re.compile(r"\bmoving\s+(?:out|away)\b", re.IGNORECASE),
+    )
 
     def __init__(
         self,
@@ -83,7 +97,9 @@ class ScenarioService:
                         "response_schema": self._response_schema(),
                     },
                 )
-                return Scenario.model_validate(response.parsed)
+                scenario = Scenario.model_validate(response.parsed)
+                self._reject_overused_premise(scenario)
+                return scenario
             except ScenarioGenerationError:
                 raise
             except Exception as error:
@@ -106,7 +122,18 @@ class ScenarioService:
         return self._client
 
     def _build_prompt(self, tone: Tone) -> str:
-        return self._prompt_template.format(tone=tone.value)
+        return self._prompt_template.format(
+            tone=tone.value,
+            random_words=get_random_words(),
+        )
+
+    @classmethod
+    def _reject_overused_premise(cls, scenario: Scenario) -> None:
+        text = " ".join(
+            (scenario.scenario, scenario.player_a_role, scenario.player_b_role)
+        )
+        if any(pattern.search(text) for pattern in cls._OVERUSED_PATTERNS):
+            raise ValueError("Scenario matches an overused premise pattern")
 
     def _response_schema(self) -> dict[str, Any]:
         return {

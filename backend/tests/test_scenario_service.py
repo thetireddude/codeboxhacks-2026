@@ -65,6 +65,21 @@ def test_retries_once_after_an_invalid_response():
     assert len(service._client.models.calls) == 2
 
 
+def test_retries_when_gemini_returns_an_overused_premise():
+    overused_scenario = {
+        "tone": "wacky",
+        "scenario": "Two guests realize they brought the exact same potato salad.",
+        "player_a_role": "Potluck guest",
+        "player_b_role": "Another potluck guest",
+    }
+    service = _service([overused_scenario, VALID_SCENARIO])
+
+    scenario = service.generate_scenario()
+
+    assert scenario.scenario == VALID_SCENARIO["scenario"]
+    assert len(service._client.models.calls) == 2
+
+
 def test_raises_a_clear_error_after_two_failed_attempts():
     service = _service(
         [RuntimeError("temporary outage"), RuntimeError("temporary outage")]

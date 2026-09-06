@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class Tone(StrEnum):
+    MUNDANE = "mundane"
     RELATABLE = "relatable"
     WACKY = "wacky"
     FUNNY = "funny"
