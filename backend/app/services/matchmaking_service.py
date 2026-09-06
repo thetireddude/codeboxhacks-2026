@@ -66,6 +66,33 @@ class MatchmakingService:
             self._save_guest(guest, GuestStatus.LOBBY)
         return removed
 
+    def cancel_unstarted_match(
+        self, guest_id: UUID, socket_id: str, match_id: UUID
+    ) -> MatchState | None:
+        """Cancel a match before either player has entered the media room.
+
+        Queue membership and a matched-game binding are different pieces of
+        state.  Treating a matched player as though they were merely waiting in
+        the queue leaves the guest-match binding in place and prevents an
+        immediate retry.  Cancelling the pending match releases both players,
+        since neither can reasonably continue the one-player match.
+        """
+        self._require_owned_guest(guest_id, socket_id)
+        match = self._storage.get_match_for_guest(guest_id)
+        if match is None or match.match_id != match_id:
+            return None
+        if match.state != MatchStatus.MATCH_FOUND:
+            raise MatchmakingError(
+                "Only a match awaiting confirmation can be cancelled"
+            )
+
+        self._storage.delete_match(match)
+        for player_id in (match.player_a_id, match.player_b_id):
+            guest = self._storage.get_guest(player_id)
+            if guest is not None:
+                self._save_guest(guest, GuestStatus.LOBBY)
+        return match
+
     def get_guest(self, guest_id: UUID) -> Guest | None:
         return self._storage.get_guest(guest_id)
 

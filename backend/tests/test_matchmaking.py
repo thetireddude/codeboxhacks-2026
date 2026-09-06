@@ -66,6 +66,39 @@ def test_duplicate_join_is_idempotent_and_queue_leave_removes_guest():
     }
 
 
+def test_cancelling_a_found_match_releases_both_players_for_an_immediate_retry():
+    app = create_app(TestConfig)
+    first_client = socketio.test_client(app)
+    second_client = socketio.test_client(app)
+    first_guest = _new_guest(first_client)
+    second_guest = _new_guest(second_client)
+
+    first_payload = {"guest_id": first_guest["guest_id"]}
+    second_payload = {"guest_id": second_guest["guest_id"]}
+    first_join = first_client.emit("queue:join", first_payload, callback=True)
+    assert first_join["status"] == "waiting"
+    paired = second_client.emit("queue:join", second_payload, callback=True)
+    assert paired["status"] == "paired"
+    first_client.get_received()
+    second_client.get_received()
+
+    cancelled = first_client.emit(
+        "match:cancel",
+        {**first_payload, "match_id": paired["match_id"]},
+        callback=True,
+    )
+    assert cancelled == {"ok": True, "cancelled": True}
+    assert first_client.get_received()[-1]["name"] == "match:cancelled"
+    assert second_client.get_received()[-1]["name"] == "match:cancelled"
+
+    assert first_client.emit("queue:join", first_payload, callback=True) == {
+        "ok": True,
+        "status": "waiting",
+    }
+    second_join = second_client.emit("queue:join", second_payload, callback=True)
+    assert second_join["status"] == "paired"
+
+
 def test_queue_rejects_guest_identity_from_a_different_socket():
     app = create_app(TestConfig)
     owner = socketio.test_client(app)
@@ -110,8 +143,12 @@ def test_disconnected_matched_guest_can_rejoin_the_public_queue():
     first_guest = _new_guest(first_client)
     second_guest = _new_guest(second_client)
 
-    first_client.emit("queue:join", {"guest_id": first_guest["guest_id"]}, callback=True)
-    second_client.emit("queue:join", {"guest_id": second_guest["guest_id"]}, callback=True)
+    first_client.emit(
+        "queue:join", {"guest_id": first_guest["guest_id"]}, callback=True
+    )
+    second_client.emit(
+        "queue:join", {"guest_id": second_guest["guest_id"]}, callback=True
+    )
     first_client.disconnect()
 
     reconnecting_client = socketio.test_client(app)

@@ -148,13 +148,13 @@ button:not(.guest-banner button:first-of-type):active { box-shadow: inset 0 4px 
 .home-action--gold { --button-face: #b7db37; --button-light: #efff9f; --button-dark: #587116; color: #17200a; text-shadow: none; }
 .home-action--blue { --button-face: #398cc5; --button-light: #a8eaff; --button-dark: #1e537a; }
 .home-action { font-size: 10px; letter-spacing: .025em; min-height: 48px; }.home-action span { font-size: 13px; }.home-action b { font-size: 10px; }
-.media-control, .cancel-button, .cancel-link, .queue-help, .switch-button { font-size: 9px; min-height: 44px; }
+.media-control, .cancel-button, .cancel-link, .switch-button { font-size: 9px; min-height: 44px; }
 .cancel-button, .media-control { --button-face: #586c9c; --button-light: #bed6e7; --button-dark: #283851; }
 .switch-button:not(:disabled) { --button-face: #c92c91; --button-light: #ffb1df; --button-dark: #74134f; }
 .switch-button:disabled { --button-face: #4c5361; --button-light: #8a93a0; --button-dark: #242832; box-shadow: inset 2px 2px 0 rgba(255,255,255,.22), inset -3px -3px 0 rgba(0,0,0,.34), 4px 4px 0 #100b19 !important; color: #d7d6df; opacity: 1; }
 .round-icon { --button-face: #4a76a8; --button-light: #b8e5f5; --button-dark: #203d67; background: var(--button-face) !important; border-width: 4px !important; clip-path: polygon(6px 0,calc(100% - 6px) 0,calc(100% - 6px) 6px,100% 6px,100% calc(100% - 6px),calc(100% - 6px) calc(100% - 6px),calc(100% - 6px) 100%,6px 100%,6px calc(100% - 6px),0 calc(100% - 6px),0 6px,6px 6px) !important; }
 .guest-banner__claim { --button-face: #8b45bd; --button-light: #e4b6fa; --button-dark: #4c1f78; box-shadow: inset 1px 1px 0 rgba(255,255,255,.5), inset -2px -2px 0 rgba(12,4,26,.52), 2px 2px 0 #100b19 !important; }
-.queue-help, .cancel-link, .preview-round-button { --button-face: #4a76a8; --button-light: #b8e5f5; --button-dark: #203d67; color: #fff !important; padding: 7px 11px !important; text-decoration: none !important; }
+.cancel-link, .preview-round-button { --button-face: #4a76a8; --button-light: #b8e5f5; --button-dark: #203d67; color: #fff !important; padding: 7px 11px !important; text-decoration: none !important; }
 .media-control--active { --button-face: #6a9e30; --button-light: #e5ff96; --button-dark: #385d16; }
 .stt-test-actions .match-button, .stt-self-switch, .stt-judge-button { --button-face: #398cc5; --button-light: #a8eaff; --button-dark: #1e537a; }
 .guest-banner, .stt-test-label, .queue-label, .home-hero__tagline, .home-hero__motto, .media-heading > p, .scenario-card__meta, .scenario-card__role, .video-tile__label, .round-timer, .round-log header, .results-screen__subtitle, .results-player > p:first-child, .results-player > p strong, .results-categories span, .results-highlights, .media-connection, .media-error { font-family: var(--pixel-font); }

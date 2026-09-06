@@ -187,6 +187,11 @@ export function HomePage() {
         setNotice(payload.message ?? "The queue could not complete your request.");
         setQueueState("error");
       });
+      socket.on("match:cancelled", (payload) => {
+        setMatch((current) => current?.match_id === payload.match_id ? null : current);
+        setNotice(payload.message ?? "The pending match was cancelled.");
+        setScreen("home");
+      });
       socket.on("connect_error", () => {
         setNotice("Could not reach the matchmaking server. Please try again.");
         setQueueState("error");
@@ -226,14 +231,51 @@ export function HomePage() {
     connectAndJoinQueue();
   };
 
-  const returnHome = () => {
-    if (socketRef.current?.connected && guestIdRef.current) {
-      socketRef.current.emit("queue:leave", { guest_id: guestIdRef.current });
-    }
-    socketRef.current?.disconnect();
+  const resetToHome = () => {
     setNotice("");
     setMatch(null);
+    setQueueState("searching");
     setScreen("home");
+  };
+
+  const returnHome = () => {
+    const socket = socketRef.current;
+    const guestId = guestIdRef.current;
+
+    // Leaving an active media room still uses the connection lifecycle owned
+    // by the game controller.  The explicit cancellation below is only for a
+    // match that has been found but not entered.
+    if (screen === "media") {
+      socket?.disconnect();
+      resetToHome();
+      return;
+    }
+
+    if (!socket?.connected || !guestId) {
+      resetToHome();
+      return;
+    }
+
+    const payload = match && queueState === "found"
+      ? { guest_id: guestId, match_id: match.match_id }
+      : { guest_id: guestId };
+    const event = match && queueState === "found" ? "match:cancel" : "queue:leave";
+    setQueueState("leaving");
+
+    let completed = false;
+    const finish = () => {
+      if (completed) return;
+      completed = true;
+      window.clearTimeout(fallback);
+      resetToHome();
+    };
+    const fallback = window.setTimeout(() => {
+      // A lost acknowledgement must not strand the player. Disconnecting also
+      // releases a matched guest via the server's disconnect lifecycle.
+      socket.disconnect();
+      finish();
+    }, 2000);
+    socket.emit(event, payload, finish);
   };
 
   if (screen === "media") {

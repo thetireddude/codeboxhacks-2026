@@ -105,6 +105,17 @@ def _emit_match_found(service: MatchmakingService, match) -> None:
     )
 
 
+def _emit_match_cancelled(service: MatchmakingService, match) -> None:
+    payload = {
+        "match_id": str(match.match_id),
+        "message": "This match was cancelled before either player was ready.",
+    }
+    for guest_id in (match.player_a_id, match.player_b_id):
+        guest = service.get_guest(guest_id)
+        if guest is not None and guest.socket_id:
+            socketio.emit("match:cancelled", payload, to=guest.socket_id)
+
+
 def _emit_error(code: str, message: str) -> None:
     socketio.emit("match:error", match_error_payload(code, message), to=request.sid)
 
