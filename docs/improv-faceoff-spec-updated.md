@@ -1399,6 +1399,15 @@ Production scenario preparation requires `GEMINI_API_KEY`: it no longer falls
 back to a hardcoded scene when credentials are absent. Deterministic scenarios
 remain only in automated-test and standalone mock-judging paths.
 
+Scenario generation now favors grounded, two-player social scenes. It rotates
+practical scene engines and opening frames, reserves generic `Two people ...`
+openings for one in four generations, and retries recurring weak frames. Live
+tone selection is limited to mundane, relatable, funny, serious, sad, awkward,
+tense, wholesome, emotional, suspenseful, and dramatic. Wacky, stupid, and
+chaotic tones are excluded. Person-like supernatural participants are allowed,
+but sentient inanimate-object premises and inactive third-party teaching tasks
+are rejected before a scenario reaches players.
+
 ---
 
 ## Milestone 4 — Scenario Generation

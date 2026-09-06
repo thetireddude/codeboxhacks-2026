@@ -128,34 +128,79 @@ def test_rejects_the_collective_object_is_alive_or_food_premise_family():
         )
 
 
-def test_alternates_asymmetric_and_collective_subject_generations():
-    first_collective = {
-        **VALID_SCENARIO,
-        "scenario": "Two people are unpacking a delivery in a quiet office.",
-    }
+def test_makes_collective_openings_occasional_and_varies_scene_engines():
     second_asymmetric = {
         **VALID_SCENARIO,
         "scenario": "When the train arrives, a conductor waits while a traveler studies an expired ticket.",
     }
-    second_collective = {
+    third_asymmetric = {
+        **VALID_SCENARIO,
+        "scenario": "During the shop opening, a manager checks the till while a courier holds the missing receipt.",
+    }
+    collective = {
         **VALID_SCENARIO,
         "scenario": "Two people repair a display before the shop opens.",
     }
-    service = _service([VALID_SCENARIO, first_collective, second_asymmetric, second_collective])
+    service = _service([VALID_SCENARIO, second_asymmetric, third_asymmetric, collective])
 
     scenarios = [service.generate_scenario().scenario for _ in range(4)]
 
     assert scenarios == [
         VALID_SCENARIO["scenario"],
-        first_collective["scenario"],
         second_asymmetric["scenario"],
-        second_collective["scenario"],
+        third_asymmetric["scenario"],
+        collective["scenario"],
     ]
     prompts = [call["contents"] for call in service._client.models.calls]
     assert "ASYMMETRIC SUBJECT generation" in prompts[0]
-    assert "COLLECTIVE SUBJECT generation" in prompts[1]
+    assert "ASYMMETRIC SUBJECT generation" in prompts[1]
     assert "ASYMMETRIC SUBJECT generation" in prompts[2]
     assert "COLLECTIVE SUBJECT generation" in prompts[3]
+    assert "SCENE ENGINE FOR THIS ATTEMPT" in prompts[0]
+    assert prompts[0].split("SCENE ENGINE FOR THIS ATTEMPT:")[1] != prompts[1].split("SCENE ENGINE FOR THIS ATTEMPT:")[1]
+
+
+def test_rejects_recurring_collective_teaching_untangling_and_unpacking_frames():
+    service = _service([VALID_SCENARIO])
+
+    for text in (
+        "Two people are attempting to teach a pigeon to use an ATM.",
+        "Two people are trying to untangle a giant string.",
+        "Two people are unpacking boxes in a hallway.",
+        "Two people are trying to convince a sentient helmet to join a team.",
+    ):
+        with pytest.raises(ValueError, match="overused collective action frame"):
+            service._reject_repetitive_structure(
+                Scenario(
+                    tone="wacky",
+                    scenario=text,
+                    player_a_role="Building manager",
+                    player_b_role="Delivery driver",
+                )
+            )
+
+
+def test_rejects_sentient_objects_even_outside_collective_frames():
+    service = _service([VALID_SCENARIO])
+
+    with pytest.raises(ValueError, match="sentient-object premise"):
+        service._reject_repetitive_structure(
+            Scenario(
+                tone="wacky",
+                scenario="At the pool, a recruiter tries to convince a sentient helmet to join a team.",
+                player_a_role="Swim team recruiter",
+                player_b_role="Flotation coach",
+            )
+        )
+
+    service._reject_repetitive_structure(
+        Scenario(
+            tone="wacky",
+            scenario="At the market, a wizard waits while an ogre examines a price tag.",
+            player_a_role="Wizard buying supplies",
+            player_b_role="Ogre running the stall",
+        )
+    )
 
 
 def test_asymmetric_slot_retries_a_generic_pair_subject():
@@ -221,7 +266,7 @@ def test_retries_when_a_role_contains_a_blacklisted_word():
 def test_quality_gate_retries_a_low_coherence_or_uniqueness_candidate():
     incoherent = {
         **VALID_SCENARIO,
-        "scenario": "At the post office, an accountant and a sentient umbrella mail one envelope.",
+        "scenario": "At the post office, a lighthouse keeper and a baker mail one envelope.",
     }
     service = ScenarioService(
         api_key="test-key",

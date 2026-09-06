@@ -47,7 +47,19 @@ class ScenarioService:
     )
 
     _THIRD_PARTY_TASK_PATTERN = re.compile(
-        r"\b(?:teach(?:ing)?|train(?:ing)?|coach(?:ing)?|babysit(?:ting)?|supervis(?:e|ing)|care\s+for|entertain(?:ing)?)\s+(?:an?|the)\s+\w+",
+        r"\b(?:teach(?:ing)?|train(?:ing)?|coach(?:ing)?|babysit(?:ting)?|"
+        r"supervis(?:e|ing)|care\s+for|entertain(?:ing)?)\s+(?:an?|the)\s+\w+",
+        re.IGNORECASE,
+    )
+    _INANIMATE_OBJECT_NOUNS = (
+        r"helmet|umbrella|stapler|toaster|lamp|chair|table|clock|"
+        r"telephone|phone|computer|machine|atm|ticket|envelope|"
+        r"sandwich|potato|salad|broom|door|mirror|statue|painting"
+    )
+    _SENTIENT_OBJECT_PATTERN = re.compile(
+        rf"\b(?:sentient|talking)\s+(?:{_INANIMATE_OBJECT_NOUNS})\b|"
+        rf"\b(?:an?|the)\s+(?:{_INANIMATE_OBJECT_NOUNS})\s+(?:is|are)\s+"
+        r"(?:actually\s+)?(?:alive|living)\b",
         re.IGNORECASE,
     )
     _GENERIC_PAIR_SUBJECT_PATTERN = re.compile(
@@ -59,6 +71,22 @@ class ScenarioService:
         r"(?:convinced|believe|insist)(?:\s+that)?\b.{0,120}?\b"
         r"(?:is|are)\s+(?:actually\s+)?(?:alive|living|sentient|food|edible)\b",
         re.IGNORECASE,
+    )
+    _OVERUSED_COLLECTIVE_ACTION_PATTERN = re.compile(
+        r"\btwo\s+(?:people|persons|strangers|friends|guests|coworkers?)\s+"
+        r"(?:are\s+)?(?:(?:trying|attempting)\s+to\s+"
+        r"(?:teach|untangle|convince)\b|unpacking\b)",
+        re.IGNORECASE,
+    )
+    _SCENE_ENGINES = (
+        "A handoff is underway: one player brings, returns, delivers, or requests something the other must receive or answer for.",
+        "A checkpoint is underway: one player controls, checks, opens, approves, or explains access while the other needs a decision.",
+        "A repair or preparation is underway: each player has a distinct practical responsibility before an ordinary event can continue.",
+        "An expectation has changed: one player expected a routine outcome and the other knows, caused, or must explain the change.",
+        "An object, notice, or rule has created a present choice: each player has a different stake in deciding what happens next.",
+        "One player has arrived in a place already occupied by the other; give both a concrete reason to be there.",
+        "A small deadline is approaching: one player owns the timing and the other owns information, materials, access, or approval.",
+        "A routine service interaction has become slightly unusual without becoming surreal; give each player a different practical position.",
     )
     def __init__(
         self,
@@ -117,9 +145,13 @@ class ScenarioService:
 
         for attempt in range(self._max_attempts):
             try:
-                asymmetric_slot = generation_index % 2 == 0
+                # Generic collective openings are intentionally occasional, not
+                # the default voice of the generator. Three out of four scenes
+                # begin from named, asymmetric positions.
+                asymmetric_slot = generation_index % 4 != 3
                 frame = self._scene_frame(generation_index, attempt, asymmetric_slot)
-                prompt = self._build_prompt(tone, frame, asymmetric_slot)
+                engine = self._scene_engine(generation_index, attempt)
+                prompt = self._build_prompt(tone, frame, asymmetric_slot, engine)
                 candidate = self._generate_structured(
                     prompt,
                     self._response_schema(),
@@ -196,6 +228,7 @@ class ScenarioService:
         tone: Tone,
         frame: tuple[str, tuple[str, ...], str],
         asymmetric_slot: bool,
+        engine: str,
     ) -> str:
         prompt = self._prompt_template.format(
             tone=tone.value,
@@ -216,12 +249,17 @@ class ScenarioService:
                 "",
                 "TWO-PLAYER CONTRACT:",
                 "- Only Player A and Player B may be active characters. Both must be able to speak, decide, and affect the scene.",
+                "- Supernatural or fantastical players are allowed only when they are person-like participants (for example, a wizard, ogre, ghost, alien, or robot), never a sentient inanimate prop.",
                 "- Do not make both players teach, train, coach, babysit, supervise, entertain, rescue, or care for a third character, animal, or creature.",
                 "- Give the players different immediate relationships to the situation: one may know, control, need, deliver, inspect, request, or be responsible for something the other must answer, use, question, or change.",
                 "- Their roles must describe distinct practical positions, not two interchangeable friends, guests, coworkers, customers, or people with different personality adjectives.",
                 "- Establish a concrete setting, activity, request, discovery, decision, or handoff. The premise may begin before the players directly interact, provided both have a clear playable position in the setting.",
                 "- Cooperation is valid; the asymmetry should create playable back-and-forth, not automatically make the players enemies.",
                 structure_contract,
+                "",
+                "SCENE ENGINE FOR THIS ATTEMPT:",
+                f"- {engine}",
+                "- Let the engine shape the relationship and immediate situation; do not repeat it verbatim.",
                 "",
                 "THIS ATTEMPT'S REQUIRED OPENING FRAME:",
                 f"- {instruction}",
@@ -235,7 +273,13 @@ class ScenarioService:
         if not asymmetric_slot:
             return self._SCENE_FRAMES[-1]
         asymmetric_frames = self._SCENE_FRAMES[:-1]
-        return asymmetric_frames[(generation_index // 2 + attempt) % len(asymmetric_frames)]
+        # Skip the deliberately collective slot when advancing asymmetric
+        # frames, so the scene opening changes every generation.
+        asymmetric_index = generation_index - generation_index // 4
+        return asymmetric_frames[(asymmetric_index + attempt) % len(asymmetric_frames)]
+
+    def _scene_engine(self, generation_index: int, attempt: int) -> str:
+        return self._SCENE_ENGINES[(generation_index + attempt) % len(self._SCENE_ENGINES)]
 
     @staticmethod
     def _validate_opening_frame(
@@ -257,6 +301,10 @@ class ScenarioService:
         text = scenario.scenario.strip()
         if self._GENERIC_MISIDENTIFICATION_PATTERN.search(text):
             raise ValueError("Scenario uses the overused collective misidentification premise")
+        if self._OVERUSED_COLLECTIVE_ACTION_PATTERN.search(text):
+            raise ValueError("Scenario uses an overused collective action frame")
+        if self._SENTIENT_OBJECT_PATTERN.search(text):
+            raise ValueError("Scenario uses a sentient-object premise")
         if self._THIRD_PARTY_TASK_PATTERN.search(text):
             raise ValueError("Scenario makes the players manage a third inactive character")
 
