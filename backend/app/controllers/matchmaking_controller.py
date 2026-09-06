@@ -49,11 +49,15 @@ def register_matchmaking_handlers(
             _emit_match_found(service, match)
             return {"ok": True, "status": status, "match_id": str(match.match_id)}
         except (MatchmakingError, ValueError) as error:
-            _emit_error("INVALID_PAYLOAD", str(error))
-            return {"ok": False}
+            error_payload = match_error_payload("INVALID_PAYLOAD", str(error))
+            _emit_error(**error_payload)
+            return {"ok": False, "error": error_payload}
         except StorageUnavailableError:
-            _emit_error("STORAGE_UNAVAILABLE", "Matchmaking is temporarily unavailable")
-            return {"ok": False}
+            error_payload = match_error_payload(
+                "STORAGE_UNAVAILABLE", "Matchmaking is temporarily unavailable"
+            )
+            _emit_error(**error_payload)
+            return {"ok": False, "error": error_payload}
 
     @socketio.on("queue:leave")
     def leave_queue(payload: dict | None) -> dict:
@@ -61,6 +65,22 @@ def register_matchmaking_handlers(
             guest_id = _required_uuid(payload)
             return {"ok": True, "removed": service.leave_queue(guest_id, request.sid)}
         except (MatchmakingError, ValueError) as error:
+            _emit_error("INVALID_PAYLOAD", str(error))
+            return {"ok": False}
+        except StorageUnavailableError:
+            _emit_error("STORAGE_UNAVAILABLE", "Matchmaking is temporarily unavailable")
+            return {"ok": False}
+
+    @socketio.on("match:leave")
+    def leave_completed_match(payload: dict | None) -> dict:
+        try:
+            if not isinstance(payload, dict):
+                raise ValueError("payload must be an object")
+            guest_id = _required_uuid(payload)
+            match_id = UUID(str(payload["match_id"]))
+            service.leave_completed_match(guest_id, request.sid, match_id)
+            return {"ok": True}
+        except (KeyError, MatchmakingError, ValueError) as error:
             _emit_error("INVALID_PAYLOAD", str(error))
             return {"ok": False}
         except StorageUnavailableError:

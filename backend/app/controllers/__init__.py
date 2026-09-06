@@ -61,6 +61,7 @@ def register_controllers(app: Flask) -> None:
         transcript_service,
         transcription_service,
         app.config["MATCH_CLEANUP_DELAY_MS"],
+        app.config["RESULT_DISCONNECT_GRACE_MS"],
     )
     register_media_routes(app, livekit_service, service)
     register_media_handlers(livekit_service, service, socket_guests)

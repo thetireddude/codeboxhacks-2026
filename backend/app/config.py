@@ -1,49 +1,5 @@
 import os
-
-import secrets
-
 import random
-
-RANDOM_SEEDS = [
-    "object",
-    "place",
-    "action",
-    "relationship",
-    "problem",
-    "goal",
-    "event",
-]
-
-def random_seed_bundle():
-    return secrets.token_hex(8)
-
-import random
-
-WORD_POOL = [
-    "mirror",
-    "ticket",
-    "ladder",
-    "orange",
-    "receipt",
-    "bell",
-    "helmet",
-    "envelope",
-    "candle",
-    "key",
-    "map",
-    "clock",
-    "paint",
-    "coin",
-    "window",
-    "rope",
-    "shoe",
-    "menu",
-    "bucket",
-    "photograph",
-]
-
-def get_random_words() -> str:
-    return ", ".join(random.sample(WORD_POOL, 3))
 
 from dotenv import load_dotenv
 
@@ -61,10 +17,32 @@ def _as_int(name: str, default: int) -> int:
     except ValueError as error:
         raise ValueError(f"{name} must be an integer") from error
 
+
 def _as_origins(name: str, default: str) -> list[str]:
     return [
         item.strip() for item in os.getenv(name, default).split(",") if item.strip()
     ]
+
+
+def _as_words(name: str, default: str) -> tuple[str, ...]:
+    """Read a comma-separated role blacklist without empty entries."""
+    return tuple(
+        item.strip().lower()
+        for item in os.getenv(name, default).split(",")
+        if item.strip()
+    )
+
+
+_SCENARIO_WORD_POOL = (
+    "mirror", "ticket", "ladder", "orange", "receipt", "bell", "helmet",
+    "envelope", "candle", "key", "map", "clock", "paint", "coin",
+    "window", "rope", "shoe", "menu", "bucket", "photograph",
+)
+
+
+def get_random_words() -> str:
+    """Return lightweight inspiration without dictating the scene premise."""
+    return ", ".join(random.sample(_SCENARIO_WORD_POOL, 3))
 
 
 class AppConfig:
@@ -77,6 +55,9 @@ class AppConfig:
     ROUND_DURATION_MS = _as_int("ROUND_DURATION_MS", 60_000)
     COUNTDOWN_DURATION_MS = _as_int("COUNTDOWN_DURATION_MS", 3_000)
     MATCH_CLEANUP_DELAY_MS = _as_int("MATCH_CLEANUP_DELAY_MS", 300_000)
+    # Preserve result reconnects briefly, but release both guests when neither
+    # browser returns after a shared disconnect.
+    RESULT_DISCONNECT_GRACE_MS = _as_int("RESULT_DISCONNECT_GRACE_MS", 5_000)
     STARTING_SWITCH_COUNT = _as_int("STARTING_SWITCH_COUNT", 5)
     # Give the listener a practical Switch window before STT ends the turn.
     # This stays configurable for playtesting; the spec recommends 700–1200 ms.
@@ -88,6 +69,12 @@ class AppConfig:
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
     GEMINI_SCENARIO_MODEL = os.getenv("GEMINI_SCENARIO_MODEL", "gemini-3.1-flash-lite")
     GEMINI_SCENARIO_MAX_ATTEMPTS = _as_int("GEMINI_SCENARIO_MAX_ATTEMPTS", 2)
+    # Roles must support a spoken, back-and-forth scene. Deployments can extend
+    # this comma-separated list through SCENARIO_ROLE_BLACKLIST.
+    SCENARIO_ROLE_BLACKLIST = _as_words(
+        "SCENARIO_ROLE_BLACKLIST",
+        "mime,mimes,mute,muted,nonverbal,non-verbal",
+    )
     GEMINI_JUDGE_MODEL = os.getenv("GEMINI_JUDGE_MODEL", "gemini-3.1-flash-lite")
     # Keep SDK retries disabled, but retry one failed structured judgment. This
     # protects live UUID-style transcripts from a transient/model-format miss
@@ -107,94 +94,30 @@ class AppConfig:
         Tone.STUPID,
         Tone.SERIOUS,
         Tone.SAD,
-        Tone.AWKWARD,
-        Tone.TENSE,
-        Tone.EMOTIONAL,
-        Tone.CHAOTIC,
-        Tone.WHOLESOME,
-        Tone.DRAMATIC
     )
     GEMINI_SCENARIO_PROMPT_TEMPLATE = "\n".join([
         "Create one original two-person improv scene starter in a {tone} tone.",
         "For a mundane tone, use an ordinary everyday situation without a hidden twist, coincidence, or heightened premise.",
-        "",
-        "The scene should give two performers an immediate situation they can react to, discuss, or act within.",
-        "It should provide a starting point, not a plot.",
-        "",
-        "SCENE REQUIREMENTS:",
-        "- Keep the situation simple, concrete, playable, and open-ended.",
-        "- Focus on what is happening between the two people right now.",
-        "- Prefer one clear situation.",
-        "- Include at most one meaningful complication.",
-        "- Use no more than 2-3 important details total.",
-        "- Extra details are optional.",
-        "- Leave the outcome, explanation, and escalation for the performers to invent.",
-        "- The tone describes the situation, not how the performers must act.",
-        "",
-        "VARY THE SCENE ENGINE:",
-        "- Do not merely change the setting or relationship while reusing the same conflict structure.",
-        "- Vary the fundamental reason the scene is interesting.",
-        "- Possible scene engines include two people trying to complete something together.",
-        "- Possible scene engines include one person making a request.",
-        "- Possible scene engines include one person revealing useful or surprising information.",
-        "- Possible scene engines include a misunderstanding.",
-        "- Possible scene engines include an inconvenient discovery.",
-        "- Possible scene engines include an unusual shared circumstance.",
-        "- Possible scene engines include a routine interaction becoming difficult.",
-        "- Possible scene engines include two people waiting for something.",
-        "- Possible scene engines include someone needing help.",
-        "- Possible scene engines include someone explaining or demonstrating something.",
-        "- Possible scene engines include a negotiation.",
-        "- Possible scene engines include a reunion or first meeting.",
-        "- Possible scene engines include a shared responsibility.",
-        "- Possible scene engines include an unexpected arrival or interruption.",
-        "- Possible scene engines include two people reacting differently to the same event.",
-        "- Possible scene engines include a practical problem with no obvious solution.",
-        "- Possible scene engines include cooperation without conflict.",
-        "- Possible scene engines include disagreement without opposite goals.",
-        "- Possible scene engines include a situation where neither person initially has a clear goal.",
-        "- This list is inspiration, not a checklist.",
-        "",
-        "STRUCTURAL VARIETY:",
-        "- Do not default to Person A wanting X while Person B wants the opposite.",
-        "- Do not default to two characters arguing.",
-        "- Do not default to estranged relatives, ex-partners, rival coworkers, enemies, or people with unresolved history.",
-        "- Do not repeatedly build scenes around secrets, betrayals, confessions, ultimatums, or competing goals.",
-        "- Conflict is optional.",
-        "- Characters may cooperate, be confused together, share a problem, misunderstand each other, or simply react to an unusual circumstance.",
-        "- Relationships may be familiar, professional, transactional, accidental, temporary, or unspecified.",
-        "- Some scenes should work without any prior relationship between the characters.",
-        "",
-        "AVOID OVERWRITING:",
-        "- Do not stack adjectives.",
-        "- Do not stack twists.",
-        "- Do not give either character an elaborate backstory.",
-        "- Do not give both characters separate hidden motivations.",
-        "- Do not explain why every detail exists.",
-        "- Do not include a predetermined ending.",
-        "- Do not turn the setup into a movie premise.",
-        "- Do not make the scenario depend on multiple revelations.",
-        "",
-        "ROLES:",
-        "- Describe only who each person is in the immediate situation.",
-        "- Roles do not need to oppose, contrast, or balance each other.",
-        "- Roles may be asymmetric.",
-        "- One role may be more ordinary than the other.",
-        "- Do not prescribe personality, emotion, speaking style, or strategy.",
-        "- Each role must be 8 words or fewer.",
-        "",
-        "LENGTH:",
-        "- Scenario must be 18 words maximum.",
-        "- Shorter is preferred when clear.",
-        "",
-        "OPTIONAL INSPIRATION:",
-        "- You should draw one abstract concept from: {random_words}.",
-        "- You do not need to mention any of these words directly.",
-        "- Do not force them into the scene.",
-        "- Use them only if they help produce a less predictable premise.",
-        "",
-        "SAFETY:",
-        "- Do not include slurs, sexual content, graphic violence, illegal instructions, stereotypes about protected groups, scoring rules, Switch rules, or gameplay modifiers."
+        "", "The scene should be a simple, concrete, playable starting point, not a plot.",
+        "Focus on what is happening between the two people right now. Include at most one meaningful complication.",
+        "Leave the outcome, explanation, and escalation for the performers to invent.",
+        "", "VARIETY:",
+        "- Vary the fundamental reason the scene is interesting, not merely the setting or relationship.",
+        "- Conflict is optional: people may cooperate, share a problem, misunderstand each other, or react to an unusual circumstance.",
+        "- Do not default to opposing goals, arguments, ex-partners, estranged relatives, secrets, betrayals, confessions, or competing goals.",
+        "- Do not use duplicate, identical, matching, or exact-same-item premises.",
+        "- Do not use sibling, packing-up, moving-out, or moving-away premises.",
+        "", "ROLES:",
+        "- Describe only who each person is in the immediate situation; each role must be 8 words or fewer.",
+        "- Roles may be asymmetric and do not need to oppose, contrast, or prescribe personality, emotion, speaking style, or strategy.",
+        "", "LENGTH:", "- Scenario must be 18 words maximum.",
+        "", "OPTIONAL INSPIRATION:",
+        "- You may draw one abstract concept from: {random_words}.",
+        "- Do not force these words into the scene.",
+        "", "SAFETY:",
+        "- Do not use real people, copyrighted characters, slurs, sexual content, graphic violence, illegal instructions, or stereotypes about protected groups.",
+        f"- Do not assign roles containing these words: {', '.join(SCENARIO_ROLE_BLACKLIST)}.",
+        "- Do not include a winner, scoring instruction, Switch rule, or gameplay modifier.",
     ])
 
     STT_PROVIDER = os.getenv("STT_PROVIDER") or "deepgram"

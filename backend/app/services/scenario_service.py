@@ -54,6 +54,7 @@ class ScenarioService:
         max_attempts: int = 2,
         tone_pool: Sequence[Tone],
         prompt_template: str,
+        role_blacklist: Sequence[str] = (),
         client: Any | None = None,
         tone_selector: Callable[[Sequence[Tone]], Tone] = choice,
     ) -> None:
@@ -69,6 +70,7 @@ class ScenarioService:
         self._max_attempts = max_attempts
         self._tone_pool = tuple(tone_pool)
         self._prompt_template = prompt_template
+        self._role_blacklist = tuple(word.lower() for word in role_blacklist)
         self._client = client
         self._tone_selector = tone_selector
 
@@ -99,6 +101,7 @@ class ScenarioService:
                 )
                 scenario = Scenario.model_validate(response.parsed)
                 self._reject_overused_premise(scenario)
+                self._validate_roles(scenario)
                 return scenario
             except ScenarioGenerationError:
                 raise
@@ -135,6 +138,16 @@ class ScenarioService:
         if any(pattern.search(text) for pattern in cls._OVERUSED_PATTERNS):
             raise ValueError("Scenario matches an overused premise pattern")
 
+    def _validate_roles(self, scenario: Scenario) -> None:
+        """Reject a generated role that violates the deployment blacklist."""
+        roles = (scenario.player_a_role, scenario.player_b_role)
+        for word in self._role_blacklist:
+            pattern = rf"(?<!\w){re.escape(word)}(?!\w)"
+            if any(re.search(pattern, role, flags=re.IGNORECASE) for role in roles):
+                raise ValueError(
+                    "Scenario generation returned a blacklisted role; retrying."
+                )
+
     def _response_schema(self) -> dict[str, Any]:
         return {
             "type": "OBJECT",
@@ -154,13 +167,21 @@ class ScenarioService:
 def create_scenario_service(config: Any) -> ScenarioService | MockScenarioService:
     """Build Gemini generation in production and deterministic generation in tests."""
 
-    if getattr(config, "TESTING", False):
+    if _config_value(config, "TESTING", False):
         return MockScenarioService()
 
     return ScenarioService(
-        api_key=getattr(config, "GEMINI_API_KEY", None),
-        model=getattr(config, "GEMINI_SCENARIO_MODEL", None),
-        max_attempts=getattr(config, "GEMINI_SCENARIO_MAX_ATTEMPTS", 3),
-        tone_pool=getattr(config, "GEMINI_SCENARIO_TONES", ()),
-        prompt_template=getattr(config, "GEMINI_SCENARIO_PROMPT_TEMPLATE", ""),
+        api_key=_config_value(config, "GEMINI_API_KEY", ""),
+        model=_config_value(config, "GEMINI_SCENARIO_MODEL", "gemini-3.1-flash-lite"),
+        max_attempts=_config_value(config, "GEMINI_SCENARIO_MAX_ATTEMPTS", 2),
+        tone_pool=_config_value(config, "GEMINI_SCENARIO_TONES", ()),
+        prompt_template=_config_value(config, "GEMINI_SCENARIO_PROMPT_TEMPLATE", ""),
+        role_blacklist=_config_value(config, "SCENARIO_ROLE_BLACKLIST", ()),
     )
+
+
+def _config_value(config: Any, name: str, default: Any = None) -> Any:
+    """Read either Flask's mapping config or the standalone script config class."""
+    if hasattr(config, "get"):
+        return config.get(name, default)
+    return getattr(config, name, default)

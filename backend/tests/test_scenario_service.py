@@ -31,12 +31,13 @@ class FakeClient:
         self.models = FakeModels(outcomes)
 
 
-def _service(outcomes):
+def _service(outcomes, *, role_blacklist=()):
     return ScenarioService(
         api_key="test-key",
         client=FakeClient(outcomes),
         tone_pool=(Tone.WACKY,),
         prompt_template="Create an improv scene in a {tone} tone.",
+        role_blacklist=role_blacklist,
         tone_selector=lambda _: Tone.WACKY,
     )
 
@@ -106,3 +107,13 @@ def test_reports_a_missing_api_key_without_calling_gemini():
         ScenarioGenerationError, match="GEMINI_API_KEY is not configured"
     ):
         service.generate_scenario()
+
+
+def test_retries_when_a_role_contains_a_blacklisted_word():
+    blacklisted = {**VALID_SCENARIO, "player_b_role": "Silent mime"}
+    service = _service([blacklisted, VALID_SCENARIO], role_blacklist=("mime", "mute"))
+
+    scenario = service.generate_scenario()
+
+    assert scenario.player_b_role == VALID_SCENARIO["player_b_role"]
+    assert len(service._client.models.calls) == 2

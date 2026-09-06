@@ -204,7 +204,7 @@ export function HomePage() {
         window.localStorage.setItem("improv-faceoff:guest-id", guestIdRef.current);
         socket.emit("queue:join", { guest_id: guestIdRef.current }, (joined) => {
           if (!joined?.ok) {
-            setNotice("Could not join the public queue.");
+            setNotice(joined?.error?.message ?? "Could not join the public queue.");
             setQueueState("error");
           }
         });
@@ -237,7 +237,7 @@ export function HomePage() {
   };
 
   if (screen === "media") {
-    return <MediaRoom match={match} guestId={guestIdRef.current} socket={socketRef.current} onLeave={returnHome} />;
+    return <MediaRoom match={match} guestId={guestIdRef.current} socket={socketRef.current} onLeave={returnHome} onRequeue={startSearch} />;
   }
 
   if (screen === "matchmaking") {
@@ -281,7 +281,7 @@ export function HomePage() {
                 <h1>SEARCHING FOR<br /><span>AN IMPROV<br />PARTNER...</span></h1>
                 <p className="queue-copy">You&apos;re in. We&apos;ll pair you with another player as soon as someone steps up to the stage.</p>
                 <div className="queue-meter" aria-label="Searching"><i /><i /><i /><i /><i /></div>
-                <div className="queue-actions"><button className="cancel-button" type="button" onClick={returnHome}>CANCEL</button><button className="queue-help" type="button" onClick={() => setQueueState("error")}>TEST ERROR</button></div>
+                <div className="queue-actions"><button className="cancel-button" type="button" onClick={returnHome}>CANCEL</button></div>
               </>
             )}
             <p className="home-notice matchmaking-notice" role="status" aria-live="polite">{notice}</p>

@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Room, RoomEvent, Track } from "livekit-client";
 import { startPcm16Capture } from "../services/pcm16Capture.js";
 
@@ -33,12 +33,14 @@ function connectionMessage(status) {
 
 // I2 receives the real I1 match and persistent Socket.IO connection. I3-I6 own
 // scenario, transcript, Switch, and scoring integrations.
-export function MediaRoom({ match, guestId, socket, onLeave }) {
+export function MediaRoom({ match, guestId, socket, onLeave, onRequeue }) {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const remoteAudioRef = useRef(null);
   const roomRef = useRef(null);
   const captureRef = useRef(null);
+  const switchFeedbackTimerRef = useRef(null);
+  const handledSwitchEventIdsRef = useRef(new Set());
   const [connectionState, setConnectionState] = useState("setup");
   const [errorMessage, setErrorMessage] = useState("");
   const [devices, setDevices] = useState({ camera: false, microphone: false });
@@ -54,6 +56,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
   const [switchesRemaining, setSwitchesRemaining] = useState({ A: 0, B: 0 });
   const [captureCycle, setCaptureCycle] = useState(0);
   const [isSwitching, setIsSwitching] = useState(false);
+  const [switchFeedback, setSwitchFeedback] = useState(null);
   const [results, setResults] = useState(null);
 
   const localPlayer = match.player_id;
@@ -61,6 +64,27 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
   const opponentName = match.opponent?.display_name ?? "OPPONENT";
   const isInRound = connectionState === "countdown" || connectionState === "active";
   const ownRole = scenario?.[localPlayer === "A" ? "player_a_role" : "player_b_role"];
+
+  // A Switch is match-wide for presentation, but only the interrupted speaker
+  // must restart its transcription capture. The same event can arrive through
+  // the acknowledgement, Socket.IO broadcast, and transcript fallback, so it
+  // must be processed only once per client.
+  const showSwitchImpact = useCallback((event) => {
+    if (!event?.id) return;
+    if (handledSwitchEventIdsRef.current.has(event.id)) return;
+    handledSwitchEventIdsRef.current.add(event.id);
+    if (handledSwitchEventIdsRef.current.size > 100) {
+      handledSwitchEventIdsRef.current.delete(handledSwitchEventIdsRef.current.values().next().value);
+    }
+    window.clearTimeout(switchFeedbackTimerRef.current);
+    setSwitchFeedback({ eventId: event.id });
+    switchFeedbackTimerRef.current = window.setTimeout(() => setSwitchFeedback(null), 1800);
+    if (event.target_player_id === localPlayer) {
+      setPartialTranscript("");
+      setTranscriptionStatus("Switch received — starting your replacement response…");
+      setCaptureCycle((current) => current + 1);
+    }
+  }, [localPlayer]);
 
   const detachMedia = () => {
     const room = roomRef.current;
@@ -94,6 +118,10 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       if (payload.match_id !== match.match_id) return;
       if (payload.event?.type === "switch") {
         setTranscript((current) => current.some((line) => line.id === payload.event.id) ? current : [...current, payload.event]);
+        // The transcript is authoritative and is broadcast to both clients.
+        // It also guarantees that the visual feedback survives a delayed or
+        // missed dedicated switch notification.
+        showSwitchImpact(payload.event);
         return;
       }
       if (payload.event?.type !== "speech") return;
@@ -104,11 +132,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       if (payload.match_id !== match.match_id) return;
       setSwitchesRemaining(payload.switches_remaining);
       setIsSwitching(false);
-      if (payload.event?.target_player_id === localPlayer) {
-        setPartialTranscript("");
-        setTranscriptionStatus("Switch received — starting your replacement response…");
-        setCaptureCycle((current) => current + 1);
-      }
+      showSwitchImpact(payload.event);
     };
     const onSwitchRejected = (payload) => {
       if (payload.match_id !== match.match_id) return;
@@ -168,11 +192,12 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       socket.off("switch:rejected", onSwitchRejected);
       captureRef.current?.stop();
       captureRef.current = null;
+      window.clearTimeout(switchFeedbackTimerRef.current);
       socket.off("disconnect", onDisconnect);
       socket.off("connect", onReconnect);
       detachMedia();
     };
-  }, [guestId, localPlayer, match.match_id, socket]);
+  }, [guestId, localPlayer, match.match_id, showSwitchImpact, socket]);
 
   useEffect(() => {
     if (connectionState !== "active" || round?.active_player_id !== localPlayer || captureRef.current) return undefined;
@@ -191,6 +216,32 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
       captureRef.current = null;
     };
   }, [captureCycle, connectionState, guestId, localPlayer, match.match_id, round?.active_player_id, socket]);
+
+  // LiveKit audio follows the backend-owned round state. Cameras are not
+  // changed here, so both players remain visible even when one is turn-muted.
+  useEffect(() => {
+    if (!["countdown", "active", "ended"].includes(connectionState)) return undefined;
+    const participant = roomRef.current?.localParticipant;
+    if (!participant) return undefined;
+
+    const shouldPublishMicrophone = connectionState === "active"
+      && round?.active_player_id === localPlayer;
+    let cancelled = false;
+
+    participant.setMicrophoneEnabled(shouldPublishMicrophone)
+      .then(() => {
+        if (!cancelled) {
+          setDevices((current) => ({ ...current, microphone: shouldPublishMicrophone }));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setErrorMessage("Could not update your microphone for the current turn.");
+        }
+      });
+
+    return () => { cancelled = true; };
+  }, [connectionState, localPlayer, round?.active_player_id]);
 
   useEffect(() => {
     if (connectionState !== "countdown" || countdown === null || countdown <= 0) return undefined;
@@ -279,27 +330,67 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
     }
   };
 
-  const leaveRoom = () => {
-    detachMedia();
-    onLeave();
+  const releaseCompletedMatch = (next) => {
+    if (connectionState !== "results") {
+      next();
+      return;
+    }
+    socket.emit("match:leave", { match_id: match.match_id, guest_id: guestId }, (response) => {
+      if (!response?.ok) {
+        setErrorMessage("Could not leave the completed match. Please try again.");
+        return;
+      }
+      detachMedia();
+      next();
+    });
   };
 
-  const pressSwitch = () => {
-    if (isSwitching || connectionState !== "active" || round?.active_player_id === localPlayer) return;
+  const leaveRoom = () => {
+    releaseCompletedMatch(onLeave);
+  };
+
+  const findNextMatch = () => {
+    releaseCompletedMatch(onRequeue);
+  };
+
+  const canPressSwitch = connectionState === "active"
+    && !isSwitching
+    && round?.active_player_id !== localPlayer
+    && Boolean(switchesRemaining[localPlayer]);
+
+  const pressSwitch = useCallback(() => {
+    if (!canPressSwitch) return;
     setIsSwitching(true);
     socket.emit("switch:press", {
       match_id: match.match_id,
       guest_id: guestId,
       request_id: crypto.randomUUID(),
     }, (response) => {
-      if (response?.ok) return;
+      if (response?.ok) {
+        setSwitchesRemaining(response.switches_remaining ?? { A: 0, B: 0 });
+        showSwitchImpact(response.event);
+        return;
+      }
       setIsSwitching(false);
       setErrorMessage(response?.code ? `Switch unavailable: ${response.code}` : "Switch was rejected.");
     });
-  };
+  }, [canPressSwitch, guestId, match.match_id, showSwitchImpact, socket]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.code !== "Space" || event.repeat) return;
+      if (event.target instanceof HTMLElement && event.target.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (!canPressSwitch) return;
+      event.preventDefault();
+      pressSwitch();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [canPressSwitch, pressSwitch]);
 
   const timerLabel = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}`;
   const resultFor = (player) => player === "A" ? results?.player_a : results?.player_b;
+  const switchFeedbackVisible = Boolean(switchFeedback);
 
   return (
     <main className="media-page">
@@ -324,6 +415,7 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
               </article>;
             })}</div>
             {results.highlight_events.length > 0 && <div className="results-highlights"><strong>HIGHLIGHT REEL</strong>{results.highlight_events.map((event) => <span key={`${event.player_id}-${event.label}`}>PLAYER {event.player_id} · {event.label} +{event.points}</span>)}</div>}
+            <div className="queue-actions results-actions"><button className="match-button" type="button" onClick={findNextMatch}><span className="match-button__people">↻</span><span><strong>NEXT MATCH</strong><small>FIND ANOTHER OPPONENT</small></span></button><button className="cancel-link" type="button" onClick={leaveRoom}>EXIT TO HOME</button></div>
           </section> : <>
           <div className={`media-heading ${isInRound ? "media-heading--game" : ""}`}>
             <p>{isInRound ? "LIVE SCENE · ROUND 1" : "ROUND ONE · MEDIA CHECK"}</p>
@@ -340,14 +432,16 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
           )}
 
           <div className={`video-grid ${isInRound ? "game-video-grid" : ""}`}>
-            <article className={`video-tile video-tile--local ${round?.active_player_id === localPlayer ? "video-tile--active" : ""}`}>
+            <article className={`video-tile video-tile--local ${round?.active_player_id === localPlayer ? "video-tile--active" : ""} ${switchFeedbackVisible ? "video-tile--switched" : ""}`}>
               <video ref={localVideoRef} autoPlay muted playsInline className={hasLocalVideo ? "" : "video-tile__hidden"} />
               {!hasLocalVideo && <div className="video-placeholder"><b>YOU</b><span>{connectionState === "connecting" ? "CONNECTING CAMERA…" : "CAMERA PREVIEW"}</span></div>}
-              <div className="video-tile__label"><span>YOU · PLAYER {localPlayer}</span><b>{devices.microphone ? "● MIC ON" : "○ MIC OFF"}</b></div>
+              {switchFeedbackVisible && <div key={switchFeedback.eventId} className="switch-feedback" role="status" aria-live="assertive"><b>SWITCHED!</b></div>}
+              <div className="video-tile__label"><span>YOU · PLAYER {localPlayer}</span><b>{isInRound && round?.active_player_id !== localPlayer ? "○ TURN MUTED" : devices.microphone ? "● MIC ON" : "○ MIC OFF"}</b></div>
             </article>
-            <article className={`video-tile video-tile--remote ${round?.active_player_id === opponentPlayer ? "video-tile--active" : ""}`}>
+            <article className={`video-tile video-tile--remote ${round?.active_player_id === opponentPlayer ? "video-tile--active" : ""} ${switchFeedbackVisible ? "video-tile--switched" : ""}`}>
               <video ref={remoteVideoRef} autoPlay playsInline className={hasRemoteVideo ? "" : "video-tile__hidden"} />
               {!hasRemoteVideo && <div className="video-placeholder"><b>{opponentName}</b><span>{connectionState === "waiting" ? "WAITING FOR OPPONENT MEDIA" : "LIVEKIT VIDEO CONNECTING"}</span></div>}
+              {switchFeedbackVisible && <div key={`${switchFeedback.eventId}-remote`} className="switch-feedback" aria-hidden="true"><b>SWITCHED!</b></div>}
               <div className="video-tile__label"><span>{opponentName} · PLAYER {opponentPlayer}</span><b className="video-tile__waiting">{hasRemoteVideo ? "● CONNECTED" : "⌁ CONNECTING"}</b></div>
             </article>
             {connectionState === "countdown" && <div className="countdown-overlay" aria-live="assertive"><span>ROUND 1</span><b>{countdown || "GO!"}</b><small>THE SCENE STARTS NOW</small></div>}
@@ -363,9 +457,9 @@ export function MediaRoom({ match, guestId, socket, onLeave }) {
             </div>
           </section>}
 
-          {connectionState === "setup" && <div className="media-setup-actions"><button className="match-button media-permission-button" type="button" onClick={connectMedia}>ENABLE MEDIA</button></div>}
+          {connectionState === "setup" && <div className="media-setup-actions"><button className="match-button media-permission-button" type="button" onClick={connectMedia}><span className="match-button__people">◉</span><span><strong>ENABLE CAMERA + MIC</strong><small>JOIN SECURE MEDIA ROOM</small></span></button></div>}
           {connectionState === "connecting" && <p className="media-connection" role="status"><i />CONNECTING SECURE MEDIA…</p>}
-          {["waiting", "countdown", "active", "ended"].includes(connectionState) && <div className="media-controls" aria-label="Media controls"><button type="button" className={devices.microphone ? "media-control media-control--active" : "media-control"} onClick={() => toggleDevice("microphone")}>{devices.microphone ? "MIC ON" : "MIC OFF"}</button><button type="button" className={devices.camera ? "media-control media-control--active" : "media-control"} onClick={() => toggleDevice("camera")}>{devices.camera ? "CAM ON" : "CAM OFF"}</button>{connectionState === "active" && <button type="button" className="switch-button switch-button--live" disabled={isSwitching || round?.active_player_id === localPlayer || !switchesRemaining[localPlayer]} onClick={pressSwitch}>SWITCH</button>}</div>}
+          {["waiting", "countdown", "active", "ended"].includes(connectionState) && <div className="media-controls" aria-label="Media controls">{connectionState === "waiting" && <button type="button" className={devices.microphone ? "media-control media-control--active" : "media-control"} onClick={() => toggleDevice("microphone")}>{devices.microphone ? "◉" : "○"}<span>{devices.microphone ? "MUTE" : "UNMUTE"}</span></button>}<button type="button" className={devices.camera ? "media-control media-control--active" : "media-control"} onClick={() => toggleDevice("camera")}>{devices.camera ? "◉" : "○"}<span>{devices.camera ? "CAMERA ON" : "CAMERA OFF"}</span></button>{connectionState === "active" && <button type="button" className="switch-button switch-button--live" disabled={!canPressSwitch} onClick={pressSwitch}>↯ SWITCH<small>SPACE · {switchesRemaining[localPlayer]} LEFT</small></button>}</div>}
           {errorMessage && <p className="media-error" role="alert">{errorMessage}</p>}
           <p className="media-connection" role="status"><i />{connectionMessage(connectionState)}</p>
           {connectionState === "active" && <p className="media-connection"><i />{transcriptionStatus}</p>}

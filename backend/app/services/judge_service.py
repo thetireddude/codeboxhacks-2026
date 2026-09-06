@@ -258,17 +258,17 @@ def create_judge_service(config: Any) -> JudgeService:
     if _config_value(config, "TESTING", False):
         return TestJudgeService()
     return JudgeService(
-        api_key=_config_value(config, "GEMINI_API_KEY"),
-        model=_config_value(config, "GEMINI_JUDGE_MODEL"),
-        max_attempts=_config_value(config, "GEMINI_JUDGE_MAX_ATTEMPTS"),
-        timeout_ms=_config_value(config, "GEMINI_JUDGE_TIMEOUT_MS"),
+        api_key=_config_value(config, "GEMINI_API_KEY", ""),
+        model=_config_value(config, "GEMINI_JUDGE_MODEL", "gemini-3.1-flash-lite"),
+        max_attempts=_config_value(config, "GEMINI_JUDGE_MAX_ATTEMPTS", 1),
+        timeout_ms=_config_value(config, "GEMINI_JUDGE_TIMEOUT_MS", 12_000),
     )
 
 
 def _config_value(config: Any, name: str, default: Any = None) -> Any:
     """Read either Flask's mapping config or the standalone script config class."""
     if hasattr(config, "get"):
-        return getattr(config, "SOME_SETTING", None)
+        return config.get(name, default)
     return getattr(config, name, default)
 
 
